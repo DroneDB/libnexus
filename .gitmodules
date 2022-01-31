@@ -1,0 +1,6 @@
+[submodule "vendor/vcglib"]
+	path = vendor/vcglib
+	url = https://github.com/DroneDB/vcglib
+[submodule "vendor/nexus"]
+	path = vendor/nexus
+	url = https://github.com/DroneDB/nexus
