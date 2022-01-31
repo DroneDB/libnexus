@@ -47,11 +47,16 @@ SET(SOURCES
 include_directories("vendor/nexus/src/nxsbuild")
 
 add_library(nxs SHARED ${SOURCES} ${HEADERS})
-
 target_link_libraries(nxs PUBLIC nexus)
+
 set_target_properties(nxs PROPERTIES PUBLIC_HEADER libnxs.h)
 
 install(TARGETS nxs)
+
+file(GLOB QT_LIBS "${Qt5_DIR}/../../*.so*")
+foreach ( qt_lib ${QT_LIBS} )
+    install( FILES ${qt_lib} DESTINATION lib)
+endforeach()
 
 if (BUILD_NXS_TEST)
     add_executable(nxs_test nxs_test.cpp)
