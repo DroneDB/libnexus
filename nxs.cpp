@@ -27,11 +27,15 @@ for more details.
 #include "meshstream.h"
 #include "kdtree.h"
 #include "../nxsbuild/nexusbuilder.h"
+#include "../common/qtnexusfile.h"
+#include "../common/traversal.h"
+#include "../nxsedit/extractor.h"
 #include "plyloader.h"
 #include "objloader.h"
 #include "tsploader.h"
 
 using namespace std;
+using namespace nx;
 
 NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 
@@ -48,7 +52,7 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 	int skiplevels = 0;
 	QString mtl;
 	QString translate;
-	bool center = false;
+	// bool center = false;
 
 
 	bool point_cloud = false;
@@ -145,7 +149,151 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 		}
 
 		builder.create(tree, stream, top_node_size);
-		builder.save(QString(output));
+		QString qOutput(output);
+		bool compress = qOutput.endsWith(".nxz");
+		if (compress){
+			// Generate temporary uncompressed file first
+			qOutput = qOutput + ".tmp.nxs";
+		}
+
+		builder.save(qOutput);
+
+		if (compress){
+
+			float coord_step = 0.0f; //approxismate step for quantization
+			int position_bits = 0;
+			float error_q = 0.1;
+			int luma_bits = 6;
+			int chroma_bits = 6;
+			int alpha_bits = 5;
+			int norm_bits = 10;
+			float tex_step = 0.25;
+
+			double error(-1.0);
+			double max_size(0.0);
+			int max_triangles(0.0);
+			int max_level(-1);
+			QString projection("");
+			QString matrix("");
+			QString imatrix("");
+			QString compresslib("corto");
+
+			bool info = false;
+			bool check = false;
+			bool drop_level = false;
+			QString recompute_error;
+
+			inputs.clear();
+			inputs.append(qOutput);
+
+			NexusData nexus;
+			nexus.file = new QTNexusFile();
+			bool read_only = true;
+			if(!recompute_error.isEmpty())
+				read_only = false;
+
+			if(!nexus.open(inputs[0].toLatin1())) {
+				cerr << "Fatal error: could not open file " << qPrintable(inputs[0]) << endl;
+				return NXSERR_EXCEPTION;
+			}
+
+			QString qCompressedOutput(output);
+
+			Extractor extractor(&nexus);
+
+			// if(max_size != 0.0)
+			// 	extractor.selectBySize(max_size*(1<<20));
+
+			// if(error != -1)
+			// 	extractor.selectByError(error);
+
+			// if(max_triangles != 0)
+			// 	extractor.selectByTriangles(max_triangles);
+
+			// if(max_level >= 0)
+			// 	extractor.selectByLevel(max_level);
+
+			// if(drop_level)
+			// 	extractor.dropLevel();
+
+			// bool invert = false;
+			// if(!imatrix.isEmpty()) {
+			// 	matrix = imatrix;
+			// 	invert = true;
+			// }
+			// if(!matrix.isEmpty()) {
+			// 	QStringList sl = matrix.split(":");
+			// 	if(sl.size() != 16) {
+			// 		cerr << "Wrong matrix: found only " << sl.size() << " elements" << endl;
+			// 		exit(-1);
+			// 	}
+			// 	vcg::Matrix44f m;
+			// 	for(int i = 0; i < sl.size(); i++)
+			// 		m.V()[i] = sl.at(i).toFloat();
+			// 	//if(invert)
+			// 	//    m = vcg::Invert(m);
+
+			// 	extractor.setMatrix(m);
+			// }
+
+			Signature signature = nexus.header.signature;
+			signature.flags &= ~(Signature::MECO | Signature::CORTO);
+			if(compresslib == "meco")
+				signature.flags |= Signature::MECO;
+			else if(compresslib == "corto")
+				signature.flags |= Signature::CORTO;
+			else {
+				cerr << "Unknown compression method: " << qPrintable(compresslib) << endl;
+				return NXSERR_EXCEPTION;
+			}
+			if(coord_step) {  //global precision, absolute value
+				extractor.error_factor = 0.0; //ignore error factor.
+				//do nothing
+			} else if(position_bits) {
+				vcg::Sphere3f &sphere = nexus.header.sphere;
+				coord_step = sphere.Radius()/pow(2.0f, position_bits);
+				extractor.error_factor = 0.0;
+
+			} else if(error_q) {
+				//take node 0:
+				uint32_t sink = nexus.header.n_nodes -1;
+				coord_step = error_q*nexus.nodes[0].error/2;
+				for(unsigned int i = 0; i < sink; i++){
+					Node &n = nexus.nodes[i];
+					Patch &patch = nexus.patches[n.first_patch];
+					if(patch.node != sink)
+						continue;
+					double e = error_q*n.error/2;
+					if(e < coord_step && e > 0)
+						coord_step = e; //we are looking at level1 error, need level0 estimate.
+				}
+				extractor.error_factor = error_q;
+			}
+			cout << "Vertex quantization step: " << coord_step << endl;
+			cout << "Texture quantization step: " << tex_step << endl;
+			extractor.coord_q =(int)log2(coord_step);
+			extractor.norm_bits = norm_bits;
+			extractor.color_bits[0] = luma_bits;
+			extractor.color_bits[1] = chroma_bits;
+			extractor.color_bits[2] = chroma_bits;
+			extractor.color_bits[3] = alpha_bits;
+			extractor.tex_step = tex_step; //was (int)log2(tex_step * pow(2, -12));, moved to per node value
+			//cout << "Texture step: " << extractor.tex_step << endl;
+
+			cout << "Saving with flag: " << signature.flags;
+			if (signature.flags & Signature::MECO) cout << " (compressed with MECO)";
+			else if (signature.flags & Signature::CORTO) cout << " (compressed with CORTO)";
+			else cout << " (not compressed)";
+			cout << endl;
+
+			extractor.save(qCompressedOutput, signature);
+
+			cout << "Saving to file " << qPrintable(output) << endl;
+
+			// Remove old tmp file
+			QFile::remove(qOutput);
+
+		}
 
 	} catch(QString error) {
 		cerr << "Fatal error: " << qPrintable(error) << endl;

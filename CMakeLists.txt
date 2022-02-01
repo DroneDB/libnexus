@@ -41,7 +41,7 @@ SET(HEADERS
 
 SET(SOURCES
 	${VCGDIR}/wrap/system/qgetopt.cpp
-	libnxs.cpp
+	nxs.cpp
 )
 
 include_directories("vendor/nexus/src/nxsbuild")
@@ -49,14 +49,11 @@ include_directories("vendor/nexus/src/nxsbuild")
 add_library(nxs SHARED ${SOURCES} ${HEADERS})
 target_link_libraries(nxs PUBLIC nexus)
 
-set_target_properties(nxs PROPERTIES PUBLIC_HEADER libnxs.h)
+set_target_properties(nxs PROPERTIES PUBLIC_HEADER nxs.h)
 
-install(TARGETS nxs)
-
-file(GLOB QT_LIBS "${Qt5_DIR}/../../*.so*")
-foreach ( qt_lib ${QT_LIBS} )
-    install( FILES ${qt_lib} DESTINATION lib)
-endforeach()
+install(TARGETS nxs EXPORT nxs DESTINATION lib)
+# install(EXPORT nxs DESTINATION lib)
+install(FILES cmake/nxs-config.cmake DESTINATION share/cmake/nxs)
 
 if (BUILD_NXS_TEST)
     add_executable(nxs_test nxs_test.cpp)
