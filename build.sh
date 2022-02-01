@@ -59,12 +59,11 @@ if [ ! -e $QT_PKG ]; then
 fi
 
 dpkg -x $QT_PKG ./Qt9.5
-mkdir -p install/DEBIAN
-
 cmake -DQt5_DIR=${__dirname}/build/Qt9.5/lib/cmake/Qt5 -DCMAKE_INSTALL_PREFIX=${__dirname}/install ..
 make -j$(nproc) && make install
 
 cd $__dirname
+mkdir -p install/DEBIAN
 
 # Build dev package
 echo "Package: nxs

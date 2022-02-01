@@ -47,12 +47,10 @@ SET(SOURCES
 include_directories("vendor/nexus/src/nxsbuild")
 
 add_library(nxs SHARED ${SOURCES} ${HEADERS})
-target_link_libraries(nxs PUBLIC nexus)
-
-set_target_properties(nxs PROPERTIES PUBLIC_HEADER nxs.h)
+target_link_libraries(nxs PUBLIC nexus pthread dl)
 
 install(TARGETS nxs EXPORT nxs DESTINATION lib)
-# install(EXPORT nxs DESTINATION lib)
+install(FILES nxs.h DESTINATION include)
 install(FILES cmake/nxs-config.cmake DESTINATION share/cmake/nxs)
 
 if (BUILD_NXS_TEST)
