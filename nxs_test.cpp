@@ -1,6 +1,6 @@
 #include <iostream>
 #include <string.h>
-#include "libnxs.h"
+#include "nxs.h"
 
 int main(int argc, char *argv[]){
     if (argc < 2) {

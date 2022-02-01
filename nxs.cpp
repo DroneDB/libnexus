@@ -16,7 +16,7 @@ GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
 for more details.
 */
 
-#include "libnxs.h"
+#include "nxs.h"
 #include <iostream>
 #include <iomanip>
 
