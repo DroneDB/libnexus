@@ -43,12 +43,12 @@ check_command "curl" "apt install curl" "apt install curl -y"
 check_command "g++" "apt install build-essential" "apt install build-essential -y"
 check_command "cmake" "apt install cmake" "apt install cmake -y"
 
-# if [ -e build ]; then
-# 	echo "Removing previous build directory"
-# 	rm -fr build
-# fi
+if [ -e build ]; then
+	echo "Removing previous build directory"
+	rm -fr build
+fi
 
-# mkdir -p build
+mkdir -p build
 cd build
 
 QT_PKG=qt5-5.9.5-minimal-ubuntu-$UBUNTU_VERSION-amd64-dev.deb
