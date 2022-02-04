@@ -98,26 +98,26 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 		bool has_normals = stream->hasNormals();
 		bool has_textures = stream->hasTextures();
 
-		cout << "Components: " << input;
-		if(has_normals) cout << " normals";
-		if(has_colors) cout << " colors";
-		if(has_textures) cout << " textures";
-		cout << "\n";
+		//cout << "Components: " << input;
+		//if(has_normals) cout << " normals";
+		//if(has_colors) cout << " colors";
+		//if(has_textures) cout << " textures";
+		//cout << "\n";
 
 		quint32 components = 0;
 		if(!point_cloud) components |= NexusBuilder::FACES;
 
 		if((!no_normals && (!point_cloud || has_normals)) || normals) {
 			components |= NexusBuilder::NORMALS;
-			cout << "Normals enabled\n";
+			//cout << "Normals enabled\n";
 		}
 		if((has_colors  && !no_colors ) || colors ) {
 			components |= NexusBuilder::COLORS;
-			cout << "Colors enabled\n";
+			//cout << "Colors enabled\n";
 		}
 		if(has_textures && !no_texcoords) {
 			components |= NexusBuilder::TEXTURES;
-			cout << "Textures enabled\n";
+			//cout << "Textures enabled\n";
 		}
 
 		//WORKAROUND to save loading textures not needed
@@ -137,7 +137,7 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 		builder.tex_quality = tex_quality;
 		bool success = builder.initAtlas(stream->textures);
 		if(!success) {
-			cerr << "Exiting" << endl;
+			//cerr << "Exiting" << endl;
 			return NXSERR_EXCEPTION;
 		}
 
@@ -195,7 +195,7 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 				read_only = false;
 
 			if(!nexus.open(inputs[0].toLatin1())) {
-				cerr << "Fatal error: could not open file " << qPrintable(inputs[0]) << endl;
+				//cerr << "Fatal error: could not open file " << qPrintable(inputs[0]) << endl;
 				return NXSERR_EXCEPTION;
 			}
 
@@ -245,7 +245,7 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 			else if(compresslib == "corto")
 				signature.flags |= Signature::CORTO;
 			else {
-				cerr << "Unknown compression method: " << qPrintable(compresslib) << endl;
+				//cerr << "Unknown compression method: " << qPrintable(compresslib) << endl;
 				return NXSERR_EXCEPTION;
 			}
 			if(coord_step) {  //global precision, absolute value
@@ -271,8 +271,8 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 				}
 				extractor.error_factor = error_q;
 			}
-			cout << "Vertex quantization step: " << coord_step << endl;
-			cout << "Texture quantization step: " << tex_step << endl;
+			//cout << "Vertex quantization step: " << coord_step << endl;
+			//cout << "Texture quantization step: " << tex_step << endl;
 			extractor.coord_q =(int)log2(coord_step);
 			extractor.norm_bits = norm_bits;
 			extractor.color_bits[0] = luma_bits;
@@ -282,15 +282,15 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 			extractor.tex_step = tex_step; //was (int)log2(tex_step * pow(2, -12));, moved to per node value
 			//cout << "Texture step: " << extractor.tex_step << endl;
 
-			cout << "Saving with flag: " << signature.flags;
-			if (signature.flags & Signature::MECO) cout << " (compressed with MECO)";
+			//cout << "Saving with flag: " << signature.flags;
+			/*if (signature.flags & Signature::MECO) cout << " (compressed with MECO)";
 			else if (signature.flags & Signature::CORTO) cout << " (compressed with CORTO)";
 			else cout << " (not compressed)";
-			cout << endl;
+			cout << endl;*/
 
 			extractor.save(qCompressedOutput, signature);
 
-			cout << "Saving to file " << qPrintable(output) << endl;
+			//cout << "Saving to file " << qPrintable(output) << endl;
 
 			// Remove old tmp file
 			QFile::remove(qOutput);
@@ -298,11 +298,11 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 		}
 
 	} catch(QString error) {
-		cerr << "Fatal error: " << qPrintable(error) << endl;
+		//cerr << "Fatal error: " << qPrintable(error) << endl;
 		returncode = NXSERR_EXCEPTION;
 
 	} catch(const char *error) {
-		cerr << "Fatal error: " << error << endl;
+		//cerr << "Fatal error: " << error << endl;
 		returncode = NXSERR_EXCEPTION;
 	}
 
