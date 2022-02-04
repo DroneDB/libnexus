@@ -1,6 +1,6 @@
 # libnexus
 
-Self-contained, dependency-free C Library to generate [Nexus](https://github.com/cnr-isti-vclab/nexus) files. 
+Self-contained, dependency-free C Library to generate [Nexus](https://github.com/cnr-isti-vclab/nexus) files. It's main feature is that it doesn't depend on QT.
 
 It's been tested on Arch / Ubuntu Linux and Windows.
 
