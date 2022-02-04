@@ -33,21 +33,24 @@ add_subdirectory("vendor/nexus")
 #add_subdirectory(vendor/nexus/corto EXCLUDE_FROM_ALL)
 
 SET(HEADERS
-	${VCGDIR}/wrap/system/qgetopt.h
 	vendor/nexus/src/nxsbuild/partition.h
 	vendor/nexus/src/nxsbuild/trianglesoup.h
 	vendor/nexus/src/nxsbuild/vertex_cache_optimizer.h
 )
 
 SET(SOURCES
-	${VCGDIR}/wrap/system/qgetopt.cpp
 	nxs.cpp
 )
 
 include_directories("vendor/nexus/src/nxsbuild")
 
 add_library(nxs SHARED ${SOURCES} ${HEADERS})
-target_link_libraries(nxs PUBLIC nexus)
+set(ADDITIONAL_LIBS "")
+
+if (WIN32)
+	list(APPEND ADDITIONAL_LIBS netapi32 wsock32 ws2_32 userenv version winmm)
+endif()
+target_link_libraries(nxs PUBLIC nexus ${ADDITIONAL_LIBS})
 
 install(TARGETS nxs EXPORT nxs DESTINATION lib)
 install(FILES nxs.h DESTINATION include)
@@ -55,7 +58,11 @@ install(FILES cmake/nxs-config.cmake DESTINATION share/cmake/nxs)
 
 if (BUILD_NXS_TEST)
     add_executable(nxs_test nxs_test.cpp)
-    target_link_libraries(nxs_test PUBLIC nxs pthread dl)
+	if (UNIX)
+    	target_link_libraries(nxs_test PUBLIC nxs pthread dl)
+	else()
+		target_link_libraries(nxs_test PUBLIC nxs)
+	endif()
     install(TARGETS nxs_test)
 endif()
 

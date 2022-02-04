@@ -8,7 +8,7 @@ int main(int argc, char *argv[]){
         exit(1);
     }
 
-    if (argc >= 2 && strcmp(argv[2], "--compress") == 0){
+    if (argc >= 3 && strcmp(argv[2], "--compress") == 0){
         nexusBuild(argv[1], "out.nxz");
     }else{
         nexusBuild(argv[1], "out.nxs");

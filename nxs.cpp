@@ -21,6 +21,7 @@ for more details.
 #include <iomanip>
 
 #include <QStringList>
+#include <QtPlugin>
 
 #include <wrap/system/qgetopt.h>
 
@@ -38,6 +39,7 @@ using namespace std;
 using namespace nx;
 
 NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
+	Q_IMPORT_PLUGIN(QJpegPlugin);
 
 	// we create a QCoreApplication just so that QT loads image IO plugins (for jpg and tiff loading)
 	int node_size = 1<<15;

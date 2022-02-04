@@ -15,8 +15,10 @@ find_path(SDL2_INCLUDE_DIR
 )
 set(NXS_INCLUDE_DIRS ${NXS_INCLUDE_DIR})
 
+if (UNIX)
 list(APPEND NXS_LIBRARY "pthread")
 list(APPEND NXS_LIBRARY "dl")
+endif()
 
 set(NXS_LIBRARIES ${NXS_LIBRARY})
 
