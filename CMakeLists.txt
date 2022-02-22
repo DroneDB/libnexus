@@ -42,6 +42,14 @@ SET(SOURCES
 	nxs.cpp
 )
 
+get_property(initialize_static_libjpeg GLOBAL PROPERTY USE_NEXUS_STATIC_LIBJPEG)
+if (initialize_static_libjpeg STREQUAL "YES")
+    add_compile_definitions(INITIALIZE_STATIC_LIBJPEG)
+    message(STATUS "Libjpeg statically initialized")
+else()
+    message(STATUS "Libjpeg initialized as plugin")
+endif()
+
 include_directories("vendor/nexus/src/nxsbuild")
 
 add_library(nxs SHARED ${SOURCES} ${HEADERS})
