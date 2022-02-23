@@ -293,12 +293,12 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 			extractor.save(qCompressedOutput, signature);
 
 			//cout << "Saving to file " << qPrintable(output) << endl;
-
-			// Remove old tmp file
-			QFile::remove(qOutput);
-
 		}
 
+		if (compress){
+			// Remove old tmp file
+			QFile::remove(qOutput);
+		}
 	} catch(QString error) {
 		//cerr << "Fatal error: " << qPrintable(error) << endl;
 		returncode = NXSERR_EXCEPTION;
