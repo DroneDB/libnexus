@@ -42,7 +42,6 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 #ifdef INITIALIZE_STATIC_LIBJPEG
 	Q_IMPORT_PLUGIN(QJpegPlugin);
 #endif
-
 	// we create a QCoreApplication just so that QT loads image IO plugins (for jpg and tiff loading)
 	int node_size = 1<<15;
 	float texel_weight =0.1; //relative weight of texels.
