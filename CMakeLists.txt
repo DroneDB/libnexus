@@ -59,6 +59,7 @@ if (WIN32)
 	list(APPEND ADDITIONAL_LIBS netapi32 wsock32 ws2_32 userenv version winmm)
 endif()
 target_link_libraries(nxs PUBLIC nexus ${ADDITIONAL_LIBS})
+target_compile_options(nxs PRIVATE -fexceptions -fnon-call-exceptions)
 
 install(TARGETS nxs EXPORT nxs DESTINATION lib)
 install(FILES nxs.h DESTINATION include)
