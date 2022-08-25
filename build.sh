@@ -40,8 +40,8 @@ check_command(){
 }
 
 check_command "curl" "apt install curl" "apt install curl -y"
-check_command "g++" "apt install build-essential" "apt install build-essential -y"
-check_command "cmake" "apt install cmake" "apt install cmake -y"
+check_command "g++-9" "apt install build-essential" "apt install build-essential -y"
+check_command "cmake" "apt install cmake" "apt install cmake -y --no-install-recommends"
 
 if [ -e build ]; then
 	echo "Removing previous build directory"
@@ -51,7 +51,7 @@ fi
 mkdir -p build
 cd build
 
-QT_PKG=qt5-5.9.5-minimal-ubuntu-$UBUNTU_VERSION-amd64-dev.deb
+QT_PKG=qt5-5.9.5-minimal-ubuntu-$UBUNTU_VERSION-$(arch)-dev.deb
 
 if [ ! -e $QT_PKG ]; then
     echo Downloading QT5 Minimal...
@@ -65,14 +65,15 @@ make -j$(nproc) && make install
 cd $__dirname
 mkdir -p install/DEBIAN
 
+ARCH=$(arch)
 # Build dev package
 echo "Package: nxs
 Version: 1.0.0
-Architecture: amd64
+Architecture: $ARCH
 Maintainer: Piero Toffanin <pt@masseranolabs.com>
 Description: libnexus development library" > install/DEBIAN/control
 
 dpkg-deb --build install
-mv -v install.deb nxs-${PKG_SUFFIX}amd64.deb
+mv -v install.deb nxs-${PKG_SUFFIX}${ARCH}.deb
 
 echo "Done!"
