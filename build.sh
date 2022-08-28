@@ -51,7 +51,11 @@ fi
 mkdir -p build
 cd build
 
-QT_PKG=qt5-5.9.5-minimal-ubuntu-$UBUNTU_VERSION-$(arch)-dev.deb
+ARCH=$(arch)
+if [[ "$ARCH" = "x86_64" ]]; then
+  ARCH="amd64"
+fi
+QT_PKG=qt5-5.9.5-minimal-ubuntu-$UBUNTU_VERSION-$ARCH-dev.deb
 
 if [ ! -e $QT_PKG ]; then
     echo Downloading QT5 Minimal...
@@ -65,7 +69,6 @@ make -j$(nproc) && make install
 cd $__dirname
 mkdir -p install/DEBIAN
 
-ARCH=$(arch)
 # Build dev package
 echo "Package: nxs
 Version: 1.0.0
