@@ -14,8 +14,7 @@ jobs:
     runs-on: windows-latest
 
     env:
-      # Define VCPKG root so caching works properly
-      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
 
     steps:
       - name: Checkout repository
@@ -35,18 +34,18 @@ jobs:
       - name: Set up vcpkg
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
-          cd $env:VCPKG_ROOT
+          git clone https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+          cd "$env:VCPKG_ROOT"
           .\bootstrap-vcpkg.bat
 
       # Install dependencies using vcpkg
       - name: Install dependencies
         run: |
-          $env:VCPKG_ROOT\vcpkg.exe install --clean-after-build --triplet x64-windows
+          & "$env:VCPKG_ROOT\vcpkg.exe" install --clean-after-build --triplet x64-windows
 
       # Configure CMake with vcpkg toolchain and set install prefix
       - name: Configure
-        run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install
+        run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install
 
       # Build and install using CMake
       - name: Build and Install
@@ -58,7 +57,7 @@ jobs:
           Compress-Archive -Path .\build\install\* -DestinationPath .\build\nxs-windows-64bit.zip
 
       - name: Upload Distribution Files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v2
         with:
           name: Packages
           path: build/nxs-windows-64bit.zip
