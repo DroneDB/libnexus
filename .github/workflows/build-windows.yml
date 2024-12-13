@@ -15,7 +15,7 @@ jobs:
 
     env:
       # Define VCPKG root so caching works properly
-      VCPKG_ROOT: ${{ runner.workspace }}/vcpkg
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
 
     steps:
       - name: Checkout repository
