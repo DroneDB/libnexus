@@ -57,7 +57,7 @@ jobs:
           Compress-Archive -Path .\build\install\* -DestinationPath .\build\nxs-windows-64bit.zip
 
       - name: Upload Distribution Files
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: Packages
           path: build/nxs-windows-64bit.zip
