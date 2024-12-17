@@ -55,6 +55,9 @@ jobs:
       # Package the installed files
       - name: Package files
         run: |
+          echo ${PWD}
+          dir build
+          dir build\install
           Compress-Archive -Path .\build\install\* -DestinationPath .\build\nxs-windows-64bit.zip
 
       - name: Upload Distribution Files
