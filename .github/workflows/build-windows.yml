@@ -1,74 +1,75 @@
 name: C/C++ CI
 
 on:
-    push:
-        branches: [master, remove-static-dependencies-and-build-scripts]
-        tags:
-            - 'v*.*.*'
-    pull_request:
-        branches: [master]
+  push:
+    branches: [master, remove-static-dependencies-and-build-scripts] # Add test branch to allow testing
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches: [master, remove-static-dependencies-and-build-scripts] # Allow PRs from test branch
 
 jobs:
-    build_windows:
-        name: Build on Windows
-        runs-on: windows-latest
-        steps:
-            # Checkout the repository
-            - uses: actions/checkout@v4
-              with:
-                submodules: 'recursive'
+  build_windows:
+    name: Build on Windows
+    runs-on: windows-latest
 
-            # Cache vcpkg and its build dependencies
-            - name: Cache vcpkg
-              uses: actions/cache@v3
-              with:
-                path: ${{ runner.temp }}/vcpkg
-                key: vcpkg-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt') }}
-                restore-keys: |
-                    vcpkg-${{ runner.os }}-
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
 
-            # Clone and bootstrap vcpkg if cache is empty
-            - name: Install vcpkg
-              run: |
-                if (-Not (Test-Path "${{ runner.temp }}/vcpkg")) {
-                    git clone https://github.com/microsoft/vcpkg.git "${{ runner.temp }}/vcpkg"
-                    cd "${{ runner.temp }}/vcpkg"
-                    .\bootstrap-vcpkg.bat
-                }
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          submodules: 'recursive'
 
-            # Install required dependencies using vcpkg
-            - name: Install Dependencies with vcpkg
-              run: |
-                ${{ runner.temp }}/vcpkg/vcpkg.exe install --triplet x64-windows
+      # Cache the vcpkg installation to speed up subsequent builds
+      - name: Cache vcpkg
+        uses: actions/cache@v2
+        id: cache-vcpkg
+        with:
+          path: ${{ env.VCPKG_ROOT }}
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
+          restore-keys: ${{ runner.os }}-vcpkg-
 
-            # Configure and build with CMake
-            - name: Configure and Build
-              run: |
-                mkdir build
-                cd build
-                cmake .. -A x64 -DCMAKE_TOOLCHAIN_FILE="${{ runner.temp }}/vcpkg/scripts/buildsystems/vcpkg.cmake" -DBUILD_NXS_TEST=1
-                cmake --build . --config Release --target ALL_BUILD -- /maxcpucount:14
+      # Set up vcpkg if not cached
+      - name: Set up vcpkg
+        if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+          cd "$env:VCPKG_ROOT"
+          .\bootstrap-vcpkg.bat
 
+      # Install dependencies using vcpkg
+      - name: Install dependencies
+        run: |
+          & "$env:VCPKG_ROOT\vcpkg.exe" install --clean-after-build --triplet x64-windows
 
-            # Compress and prepare the distribution package
-            - name: Create Distribution Package
-              run: |
-                Compress-Archive -Path build/install/* -DestinationPath build/nxs-windows-64bit.zip
+      # Configure CMake with vcpkg toolchain and set install prefix
+      - name: Configure
+        run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install
 
-            # Upload build artifacts to GitHub Actions
-            - name: Upload Distribution Files
-              uses: actions/upload-artifact@v4
-              with:
-                name: Packages
-                path: build/nxs-windows-64bit.zip
+      # Build and install using CMake
+      - name: Build and Install
+        run: cmake --build build --config Release --target INSTALL
 
-            # Upload release package to GitHub Releases ONLY on tags
-            - name: Upload Packages to Release
-              uses: svenstaro/upload-release-action@v2
-              if: startsWith(github.ref, 'refs/tags/')
-              with:
-                repo_token: ${{ secrets.GITHUB_TOKEN }}
-                file: build/nxs-windows-64bit.zip
-                file_glob: false
-                tag: ${{ github.ref }}
-                overwrite: true
+      # Package the installed files
+      - name: Package files
+        run: |
+          Compress-Archive -Path .\build\install\* -DestinationPath .\build\nxs-windows-64bit.zip
+
+      - name: Upload Distribution Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: Packages
+          path: build/nxs-windows-64bit.zip
+
+      # Upload release package to GitHub Releases ONLY on tags
+      - name: Upload Packages to Release
+        uses: svenstaro/upload-release-action@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: build/nxs-windows-64bit.zip
+          file_glob: false
+          tag: ${{ github.ref }}
+          overwrite: true
