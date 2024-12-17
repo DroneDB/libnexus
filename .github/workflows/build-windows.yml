@@ -50,14 +50,21 @@ jobs:
 
       # Build and install using CMake
       - name: Build and Install
-        run: cmake --build build --config Release --target INSTALL
+        run: |
+          cmake --build build --config Release --target INSTALL
+          echo "Listing build directory contents:"
+          Get-ChildItem -Path build -Recurse
+
+      - name: Verify Install Directory
+        run: |
+          if (-not (Test-Path "build\install")) {
+              Write-Error "Install directory not found. Build or install failed."
+              exit 1
+          }
 
       # Package the installed files
       - name: Package files
         run: |
-          echo ${PWD}
-          dir build
-          dir build\install
           Compress-Archive -Path .\build\install\* -DestinationPath .\build\nxs-windows-64bit.zip
 
       - name: Upload Distribution Files

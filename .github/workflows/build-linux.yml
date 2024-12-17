@@ -34,7 +34,11 @@ jobs:
             - name: Install System Dependencies
               run: |
                 sudo apt update
-                sudo apt install -y cmake ninja-build autoconf automake libtool pkg-config curl build-essential g++-9
+                sudo apt install -y cmake zip ninja-build autoconf automake python3 \
+                                    libtool pkg-config curl build-essential bison \
+                                    python3-jinja2 libxi-dev libxtst-dev \
+                                    ^libxcb.*-dev libx11-xcb-dev libgl1-mesa-dev libxrender-dev libxi-dev \
+                                    libxkbcommon-dev libxkbcommon-x11-dev
 
             # 4. Setup vcpkg
             - name: Setup vcpkg
