@@ -18,13 +18,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 
       # Cache the vcpkg installation to speed up subsequent builds
       - name: Cache vcpkg
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         id: cache-vcpkg
         with:
           path: ${{ env.VCPKG_ROOT }}

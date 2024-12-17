@@ -2,9 +2,9 @@ name: C/C++ CI
 
 on:
     push:
-        branches: [master]
+        branches: [master, remove-static-dependencies-and-build-scripts]
         tags:
-          - 'v*.*.*'
+            - 'v*.*.*'
     pull_request:
         branches: [master]
 
@@ -13,19 +13,70 @@ jobs:
         name: Build on Ubuntu
         runs-on: ${{ matrix.os }}
         strategy:
-          matrix:
-            os: [ubuntu-18.04, ubuntu-20.04, ubuntu-22.04]
+            matrix:
+                os: [ubuntu-18.04, ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
         steps:
-            - uses: actions/checkout@v2
+            # 1. Checkout Repository
+            - uses: actions/checkout@v4
               with:
                 submodules: 'recursive'
-            - name: Build
-              run: ./build.sh
+
+            # 2. Setup Cache for vcpkg
+            - name: Cache vcpkg packages
+              uses: actions/cache@v3
+              with:
+                path: ~/vcpkg_installed
+                key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
+                restore-keys: |
+                    ${{ runner.os }}-vcpkg-
+
+            # 3. Install Dependencies
+            - name: Install System Dependencies
+              run: |
+                sudo apt update
+                sudo apt install -y cmake ninja-build curl build-essential g++-9
+
+            # 4. Setup vcpkg
+            - name: Setup vcpkg
+              run: |
+                git clone https://github.com/microsoft/vcpkg.git ~/vcpkg
+                ~/vcpkg/bootstrap-vcpkg.sh
+                mkdir -p ~/vcpkg_installed
+              shell: bash
+
+            # 5. Configure and Build
+            - name: Configure and Build
+              run: |
+                mkdir -p build
+                cd build
+                cmake .. \
+                    -DCMAKE_TOOLCHAIN_FILE=~/vcpkg/scripts/buildsystems/vcpkg.cmake \
+                    -DVCPKG_TARGET_TRIPLET=x64-linux \
+                    -DCMAKE_INSTALL_PREFIX=install
+                cmake --build . --target install --config Release -- -j$(nproc)
+
+            # 6. Package as .deb
+            - name: Package .deb
+              run: |
+                ARCH=$(arch)
+                if [[ "$ARCH" == "x86_64" ]]; then ARCH="amd64"; fi
+                mkdir -p build/install/DEBIAN
+                echo "Package: nxs
+                      Version: 1.0.0
+                      Architecture: $ARCH
+                      Maintainer: Piero Toffanin <pt@masseranolabs.com>
+                      Description: libnexus development library" > build/install/DEBIAN/control
+                dpkg-deb --build build/install
+                mv build/install.deb nxs-${ARCH}.deb
+
+            # 7. Upload Artifacts
             - name: Upload Distribution Files
-              uses: actions/upload-artifact@v2
+              uses: actions/upload-artifact@v4
               with:
                 name: Packages
                 path: "*.deb"
+
+            # 8. Upload Packages to Release (only for tags)
             - name: Upload Packages to Release
               uses: svenstaro/upload-release-action@v2
               if: startsWith(github.ref, 'refs/tags/')
