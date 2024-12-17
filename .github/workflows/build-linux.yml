@@ -1,4 +1,4 @@
-name: C/C++ CI
+name: Linux Build
 
 on:
     push:
@@ -34,7 +34,7 @@ jobs:
             - name: Install System Dependencies
               run: |
                 sudo apt update
-                sudo apt install -y cmake ninja-build curl build-essential g++-9
+                sudo apt install -y cmake ninja-build autoconf automake libtool pkg-config curl build-essential g++-9
 
             # 4. Setup vcpkg
             - name: Setup vcpkg
