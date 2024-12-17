@@ -2,27 +2,67 @@ name: C/C++ CI
 
 on:
     push:
-        branches: [master]
+        branches: [master, remove-static-dependencies-and-build-scripts]
         tags:
-          - 'v*.*.*'
+            - 'v*.*.*'
     pull_request:
         branches: [master]
 
 jobs:
-    build_ubuntu:
+    build_windows:
         name: Build on Windows
         runs-on: windows-latest
         steps:
-            - uses: actions/checkout@v2
+            # Checkout the repository
+            - uses: actions/checkout@v4
               with:
                 submodules: 'recursive'
-            - name: Build
-              run: .\build.ps1
+
+            # Cache vcpkg and its build dependencies
+            - name: Cache vcpkg
+              uses: actions/cache@v3
+              with:
+                path: ${{ runner.temp }}/vcpkg
+                key: vcpkg-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt') }}
+                restore-keys: |
+                    vcpkg-${{ runner.os }}-
+
+            # Clone and bootstrap vcpkg if cache is empty
+            - name: Install vcpkg
+              run: |
+                if (-Not (Test-Path "${{ runner.temp }}/vcpkg")) {
+                    git clone https://github.com/microsoft/vcpkg.git "${{ runner.temp }}/vcpkg"
+                    cd "${{ runner.temp }}/vcpkg"
+                    .\bootstrap-vcpkg.bat
+                }
+
+            # Install required dependencies using vcpkg
+            - name: Install Dependencies with vcpkg
+              run: |
+                ${{ runner.temp }}/vcpkg/vcpkg.exe install --triplet x64-windows
+
+            # Configure and build with CMake
+            - name: Configure and Build
+              run: |
+                mkdir build
+                cd build
+                cmake .. -A x64 -DCMAKE_TOOLCHAIN_FILE="${{ runner.temp }}/vcpkg/scripts/buildsystems/vcpkg.cmake" -DBUILD_NXS_TEST=1
+                cmake --build . --config Release --target ALL_BUILD -- /maxcpucount:14
+
+
+            # Compress and prepare the distribution package
+            - name: Create Distribution Package
+              run: |
+                Compress-Archive -Path build/install/* -DestinationPath build/nxs-windows-64bit.zip
+
+            # Upload build artifacts to GitHub Actions
             - name: Upload Distribution Files
-              uses: actions/upload-artifact@v2
+              uses: actions/upload-artifact@v4
               with:
                 name: Packages
                 path: build/nxs-windows-64bit.zip
+
+            # Upload release package to GitHub Releases ONLY on tags
             - name: Upload Packages to Release
               uses: svenstaro/upload-release-action@v2
               if: startsWith(github.ref, 'refs/tags/')
