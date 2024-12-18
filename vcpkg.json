@@ -1,0 +1,12 @@
+{
+    "name": "libnexus",
+    "version": "1.0.0",
+    "dependencies": [
+        {
+            "name": "qt5",
+            "features": ["essentials"]
+        }
+    ],
+    "builtin-baseline": "3edabbe1407e2d4d8ce5b78bab8abf42cc966d10"
+
+}

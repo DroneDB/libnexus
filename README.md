@@ -4,19 +4,55 @@ Self-contained, dependency-free C Library to generate [Nexus](https://github.com
 
 It's been tested on Arch / Ubuntu Linux and Windows.
 
-## Usage
+## Building
 
-Download the [prebuilt binaries](https://github.com/DroneDB/libnexus/releases) or compile the library from source:
+### Linux
+
+Requirements for Ubuntu:
+
+```bash
+sudo apt-get install -y cmake zip ninja-build autoconf automake python3 \
+                                    libtool pkg-config curl build-essential bison \
+                                    python3-jinja2 libxi-dev libxtst-dev \
+                                    ^libxcb.*-dev libx11-xcb-dev libgl1-mesa-dev libxrender-dev libxi-dev \
+                                    libxkbcommon-dev libxkbcommon-x11-dev
+```
+
+The library uses vcpkg to manage dependencies. You can install it with:
+
+```bash
+git clone https://github.com/microsoft/vcpkg.git ~/vcpkg
+~/vcpkg/bootstrap-vcpkg.sh
+```
+
+Clone and compile the library from source:
 
 ```bash
 git clone https://github.com/DroneDB/libnexus/ --recurse-submodules
 cd libnexus
-mkdir build
+mkdir -p build
 cd build
+cmake .. \
+    -DCMAKE_TOOLCHAIN_FILE=~/vcpkg/scripts/buildsystems/vcpkg.cmake \
+    -DVCPKG_TARGET_TRIPLET=x64-linux
+    -DBUILD_NXS_TEST=1
 make -j$(nproc)
 ```
 
-### Example
+### Windows
+
+Assuming vcpkg is installed in `C:\vcpkg`:
+
+```powershell
+git clone https://github.com/DroneDB/libnexus/ --recurse-submodules
+cd libnexus
+mkdir -p build
+cd build
+cmake .. -A x64 -DCMAKE_TOOLCHAIN_FILE="C:\vcpkg\scripts\buildsystems\vcpkg.cmake" -DBUILD_NXS_TEST=1
+cmake --build . --config Release --target ALL_BUILD -- /maxcpucount:14
+```
+
+## Example
 
 ```
 cmake_minimum_required(VERSION 3.1)

@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.1)
 project(libnexus)
 
+# Use vcpkg manifest mode
+if(DEFINED ENV{VCPKG_ROOT})
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+else()
+    message(FATAL_ERROR "Please set VCPKG_ROOT environment variable to use vcpkg")
+endif()
+
+find_package(Qt5 REQUIRED COMPONENTS Core Gui)
+
 set (CMAKE_CXX_STANDARD 11)
 
 option(BUILD_NXS_TEST "" OFF)
@@ -58,7 +67,7 @@ set(ADDITIONAL_LIBS "")
 if (WIN32)
 	list(APPEND ADDITIONAL_LIBS netapi32 wsock32 ws2_32 userenv version winmm)
 endif()
-target_link_libraries(nxs PUBLIC nexus ${ADDITIONAL_LIBS})
+target_link_libraries(nxs PUBLIC Qt5::Core Qt5::Gui nexus ${ADDITIONAL_LIBS})
 
 install(TARGETS nxs EXPORT nxs DESTINATION lib)
 install(FILES nxs.h DESTINATION include)
