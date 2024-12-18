@@ -38,27 +38,27 @@ for more details.
 using namespace std;
 using namespace nx;
 
-NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
+NXS_DLL NXSErr nexusBuild(const char *input, const char *output)
+{
 #ifdef INITIALIZE_STATIC_LIBJPEG
 	Q_IMPORT_PLUGIN(QJpegPlugin);
 #endif
 	std::cout << "Nexus build: " << input << std::endl;
 
 	// we create a QCoreApplication just so that QT loads image IO plugins (for jpg and tiff loading)
-	int node_size = 1<<15;
-	float texel_weight =0.1; //relative weight of texels.
+	int node_size = 1 << 15;
+	float texel_weight = 0.1; // relative weight of texels.
 
 	int top_node_size = 4096;
-	float vertex_quantization = 0.0f;   //optionally quantize vertices position.
-	int tex_quality(95);                //default jpg texture quality
-	int ram_buffer(2000);               //Mb of ram to use
+	float vertex_quantization = 0.0f; // optionally quantize vertices position.
+	int tex_quality(95);			  // default jpg texture quality
+	int ram_buffer(2000);			  // Mb of ram to use
 	int n_threads = 4;
-	float scaling(0.5);                 //simplification ratio
+	float scaling(0.5); // simplification ratio
 	int skiplevels = 0;
 	QString mtl;
 	QString translate;
 	// bool center = false;
-
 
 	bool point_cloud = false;
 	bool normals = false;
@@ -70,20 +70,21 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 	bool create_pow_two_tex = false;
 	bool deepzoom = false;
 
-	//BTREE options
+	// BTREE options
 	float adaptive = 0.333f;
 
-	//Check parameters are correct
+	// Check parameters are correct
 	QStringList inputs;
 	inputs.append(input);
 
 	vcg::Point3d origin(0, 0, 0);
-	
+
 	Stream *stream = 0;
 	KDTree *tree = 0;
 	NXSErr returncode = NXSERR_NONE;
-	try {
-		quint64 max_memory = (1<<20)*(uint64_t)ram_buffer/4; //hack 4 is actually an estimate...
+	try
+	{
+		quint64 max_memory = (1 << 20) * (uint64_t)ram_buffer / 4; // hack 4 is actually an estimate...
 
 		string input = "mesh";
 		stream = new StreamSoup("cache_stream");
@@ -93,38 +94,43 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 		stream->origin = origin;
 
 		vcg::Point3d &o = stream->origin;
-		
-		//TODO: actually the stream will store textures or normals or colors even if not needed
+
+		// TODO: actually the stream will store textures or normals or colors even if not needed
 		stream->load(inputs, mtl);
 
 		bool has_colors = stream->hasColors();
 		bool has_normals = stream->hasNormals();
 		bool has_textures = stream->hasTextures();
 
-		//cout << "Components: " << input;
-		//if(has_normals) cout << " normals";
-		//if(has_colors) cout << " colors";
-		//if(has_textures) cout << " textures";
-		//cout << "\n";
+		// cout << "Components: " << input;
+		// if(has_normals) cout << " normals";
+		// if(has_colors) cout << " colors";
+		// if(has_textures) cout << " textures";
+		// cout << "\n";
 
 		quint32 components = 0;
-		if(!point_cloud) components |= NexusBuilder::FACES;
+		if (!point_cloud)
+			components |= NexusBuilder::FACES;
 
-		if((!no_normals && (!point_cloud || has_normals)) || normals) {
+		if ((!no_normals && (!point_cloud || has_normals)) || normals)
+		{
 			components |= NexusBuilder::NORMALS;
-			//cout << "Normals enabled\n";
+			// cout << "Normals enabled\n";
 		}
-		if((has_colors  && !no_colors ) || colors ) {
+		if ((has_colors && !no_colors) || colors)
+		{
 			components |= NexusBuilder::COLORS;
-			//cout << "Colors enabled\n";
+			// cout << "Colors enabled\n";
 		}
-		if(has_textures && !no_texcoords) {
+		if (has_textures && !no_texcoords)
+		{
 			components |= NexusBuilder::TEXTURES;
-			//cout << "Textures enabled\n";
+			// cout << "Textures enabled\n";
 		}
 
-		//WORKAROUND to save loading textures not needed
-		if(!(components & NexusBuilder::TEXTURES)) {
+		// WORKAROUND to save loading textures not needed
+		if (!(components & NexusBuilder::TEXTURES))
+		{
 			stream->textures.clear();
 		}
 
@@ -135,19 +141,21 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 		builder.setScaling(scaling);
 		builder.useNodeTex = !useOrigTex;
 		builder.createPowTwoTex = create_pow_two_tex;
-		if(deepzoom)
+		if (deepzoom)
 			builder.header.signature.flags |= nx::Signature::Flags::DEEPZOOM;
 		builder.tex_quality = tex_quality;
 		bool success = builder.initAtlas(stream->textures);
-		if(!success) {
-			//cerr << "Exiting" << endl;
+		if (!success)
+		{
+			// cerr << "Exiting" << endl;
 			return NXSERR_EXCEPTION;
 		}
 
 		tree = new KDTreeSoup("cache_tree", adaptive);
-		tree->setMaxMemory((1<<20)*(uint64_t)ram_buffer/2);
+		tree->setMaxMemory((1 << 20) * (uint64_t)ram_buffer / 2);
 		KDTreeSoup *treesoup = dynamic_cast<KDTreeSoup *>(tree);
-		if(treesoup) {
+		if (treesoup)
+		{
 			treesoup->setMaxWeight(node_size);
 			treesoup->texelWeight = texel_weight;
 			treesoup->setTrianglesPerBlock(node_size);
@@ -156,16 +164,18 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 		builder.create(tree, stream, top_node_size);
 		QString qOutput(output);
 		bool compress = qOutput.endsWith(".nxz");
-		if (compress){
+		if (compress)
+		{
 			// Generate temporary uncompressed file first
 			qOutput = qOutput + ".tmp.nxs";
 		}
 
 		builder.save(qOutput);
 
-		if (compress){
+		if (compress)
+		{
 
-			float coord_step = 0.0f; //approxismate step for quantization
+			float coord_step = 0.0f; // approxismate step for quantization
 			int position_bits = 0;
 			float error_q = 0.1;
 			int luma_bits = 6;
@@ -194,11 +204,12 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 			NexusData nexus;
 			nexus.file = new QTNexusFile();
 			bool read_only = true;
-			if(!recompute_error.isEmpty())
+			if (!recompute_error.isEmpty())
 				read_only = false;
 
-			if(!nexus.open(inputs[0].toLatin1())) {
-				//cerr << "Fatal error: could not open file " << qPrintable(inputs[0]) << endl;
+			if (!nexus.open(inputs[0].toLatin1()))
+			{
+				// cerr << "Fatal error: could not open file " << qPrintable(inputs[0]) << endl;
 				return NXSERR_EXCEPTION;
 			}
 
@@ -243,49 +254,55 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 
 			Signature signature = nexus.header.signature;
 			signature.flags &= ~(Signature::MECO | Signature::CORTO);
-			if(compresslib == "meco")
+			if (compresslib == "meco")
 				signature.flags |= Signature::MECO;
-			else if(compresslib == "corto")
+			else if (compresslib == "corto")
 				signature.flags |= Signature::CORTO;
-			else {
-				//cerr << "Unknown compression method: " << qPrintable(compresslib) << endl;
+			else
+			{
+				// cerr << "Unknown compression method: " << qPrintable(compresslib) << endl;
 				return NXSERR_EXCEPTION;
 			}
-			if(coord_step) {  //global precision, absolute value
-				extractor.error_factor = 0.0; //ignore error factor.
-				//do nothing
-			} else if(position_bits) {
+			if (coord_step)
+			{								  // global precision, absolute value
+				extractor.error_factor = 0.0; // ignore error factor.
+				// do nothing
+			}
+			else if (position_bits)
+			{
 				vcg::Sphere3f &sphere = nexus.header.sphere;
-				coord_step = sphere.Radius()/pow(2.0f, position_bits);
+				coord_step = sphere.Radius() / pow(2.0f, position_bits);
 				extractor.error_factor = 0.0;
-
-			} else if(error_q) {
-				//take node 0:
-				uint32_t sink = nexus.header.n_nodes -1;
-				coord_step = error_q*nexus.nodes[0].error/2;
-				for(unsigned int i = 0; i < sink; i++){
+			}
+			else if (error_q)
+			{
+				// take node 0:
+				uint32_t sink = nexus.header.n_nodes - 1;
+				coord_step = error_q * nexus.nodes[0].error / 2;
+				for (unsigned int i = 0; i < sink; i++)
+				{
 					Node &n = nexus.nodes[i];
 					Patch &patch = nexus.patches[n.first_patch];
-					if(patch.node != sink)
+					if (patch.node != sink)
 						continue;
-					double e = error_q*n.error/2;
-					if(e < coord_step && e > 0)
-						coord_step = e; //we are looking at level1 error, need level0 estimate.
+					double e = error_q * n.error / 2;
+					if (e < coord_step && e > 0)
+						coord_step = e; // we are looking at level1 error, need level0 estimate.
 				}
 				extractor.error_factor = error_q;
 			}
-			//cout << "Vertex quantization step: " << coord_step << endl;
-			//cout << "Texture quantization step: " << tex_step << endl;
-			extractor.coord_q =(int)log2(coord_step);
+			// cout << "Vertex quantization step: " << coord_step << endl;
+			// cout << "Texture quantization step: " << tex_step << endl;
+			extractor.coord_q = (int)log2(coord_step);
 			extractor.norm_bits = norm_bits;
 			extractor.color_bits[0] = luma_bits;
 			extractor.color_bits[1] = chroma_bits;
 			extractor.color_bits[2] = chroma_bits;
 			extractor.color_bits[3] = alpha_bits;
-			extractor.tex_step = tex_step; //was (int)log2(tex_step * pow(2, -12));, moved to per node value
-			//cout << "Texture step: " << extractor.tex_step << endl;
+			extractor.tex_step = tex_step; // was (int)log2(tex_step * pow(2, -12));, moved to per node value
+			// cout << "Texture step: " << extractor.tex_step << endl;
 
-			//cout << "Saving with flag: " << signature.flags;
+			// cout << "Saving with flag: " << signature.flags;
 			/*if (signature.flags & Signature::MECO) cout << " (compressed with MECO)";
 			else if (signature.flags & Signature::CORTO) cout << " (compressed with CORTO)";
 			else cout << " (not compressed)";
@@ -293,24 +310,30 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output){
 
 			extractor.save(qCompressedOutput, signature);
 
-			//cout << "Saving to file " << qPrintable(output) << endl;
+			// cout << "Saving to file " << qPrintable(output) << endl;
 		}
 
-		if (compress){
+		if (compress)
+		{
 			// Remove old tmp file
 			QFile::remove(qOutput);
 		}
-	} catch(QString error) {
-		//cerr << "Fatal error: " << qPrintable(error) << endl;
+	}
+	catch (QString error)
+	{
+		// cerr << "Fatal error: " << qPrintable(error) << endl;
 		returncode = NXSERR_EXCEPTION;
-
-	} catch(const char *error) {
-		//cerr << "Fatal error: " << error << endl;
+	}
+	catch (const char *error)
+	{
+		// cerr << "Fatal error: " << error << endl;
 		returncode = NXSERR_EXCEPTION;
 	}
 
-	if(tree)   delete tree;
-	if(stream) delete stream;
+	if (tree)
+		delete tree;
+	if (stream)
+		delete stream;
 
 	return returncode;
 }
