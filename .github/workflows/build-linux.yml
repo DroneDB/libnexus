@@ -33,8 +33,8 @@ jobs:
             # 3. Install Dependencies
             - name: Install System Dependencies
               run: |
-                sudo apt update
-                sudo apt install -y cmake zip ninja-build autoconf automake python3 \
+                sudo apt-get update
+                sudo apt-get install -y cmake zip ninja-build autoconf automake python3 \
                                     libtool pkg-config curl build-essential bison \
                                     python3-jinja2 libxi-dev libxtst-dev \
                                     ^libxcb.*-dev libx11-xcb-dev libgl1-mesa-dev libxrender-dev libxi-dev \
