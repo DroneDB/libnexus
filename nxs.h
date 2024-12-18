@@ -15,7 +15,8 @@ extern "C" {
 
 enum NXSErr {
     NXSERR_NONE = 0, // No error
-    NXSERR_EXCEPTION = 1 // Generic app exception
+    NXSERR_EXCEPTION = 1, // Generic app exception
+    NXSERR_INVALID_INPUT = 2 // Invalid input
 };
 
 NXS_DLL NXSErr nexusBuild(const char *input, const char *output);

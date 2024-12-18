@@ -19,6 +19,7 @@ for more details.
 #include "nxs.h"
 #include <iostream>
 #include <iomanip>
+#include <thread>
 
 #include <QStringList>
 #include <QtPlugin>
@@ -43,19 +44,30 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output)
 #ifdef INITIALIZE_STATIC_LIBJPEG
 	Q_IMPORT_PLUGIN(QJpegPlugin);
 #endif
-	std::cout << "Nexus build: " << input << std::endl;
+
+	// Validate parameters
+	if (!input || !output)
+	{
+		return NXSERR_INVALID_INPUT;
+	}
+
+	// Check if input file exists
+	QFile file(input);
+	if (!file.exists())
+	{
+		return NXSERR_INVALID_INPUT;
+	}
 
 	// we create a QCoreApplication just so that QT loads image IO plugins (for jpg and tiff loading)
-	int node_size = 1 << 15;
-	float texel_weight = 0.1; // relative weight of texels.
+	constexpr int node_size = 1 << 15;
+	constexpr float texel_weight = 0.1; // relative weight of texels.
+	constexpr int top_node_size = 4096;
+	constexpr float vertex_quantization = 0.0f; // optionally quantize vertices position.
+	constexpr int tex_quality(95);			  // default jpg texture quality
+	constexpr int ram_buffer(2000);			  // Mb of ram to use
+	constexpr float scaling(0.5); // simplification ratio
+	constexpr int skiplevels = 0;
 
-	int top_node_size = 4096;
-	float vertex_quantization = 0.0f; // optionally quantize vertices position.
-	int tex_quality(95);			  // default jpg texture quality
-	int ram_buffer(2000);			  // Mb of ram to use
-	int n_threads = 4;
-	float scaling(0.5); // simplification ratio
-	int skiplevels = 0;
 	QString mtl;
 	QString translate;
 	// bool center = false;
@@ -137,7 +149,8 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output)
 		NexusBuilder builder(components);
 		builder.skipSimplifyLevels = skiplevels;
 		builder.setMaxMemory(max_memory);
-		builder.n_threads = n_threads;
+		int n_threads = std::thread::hardware_concurrency();
+		builder.n_threads = n_threads == 0 ? 1 : n_threads;
 		builder.setScaling(scaling);
 		builder.useNodeTex = !useOrigTex;
 		builder.createPowTwoTex = create_pow_two_tex;
