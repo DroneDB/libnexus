@@ -64,7 +64,7 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output)
 	constexpr int top_node_size = 4096;
 	constexpr float vertex_quantization = 0.0f; // optionally quantize vertices position.
 	constexpr int tex_quality(95);			  // default jpg texture quality
-	constexpr int ram_buffer(2000);			  // Mb of ram to use
+	constexpr int ram_buffer(16000);			  // Mb of ram to use
 	constexpr float scaling(0.5); // simplification ratio
 	constexpr int skiplevels = 0;
 
