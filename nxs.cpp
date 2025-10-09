@@ -20,9 +20,12 @@ for more details.
 #include <iostream>
 #include <iomanip>
 #include <thread>
+#include <mutex>
 
+#include <QCoreApplication>
 #include <QStringList>
 #include <QtPlugin>
+#include <QImageReader>
 
 #include <wrap/system/qgetopt.h>
 
@@ -39,15 +42,20 @@ for more details.
 using namespace std;
 using namespace nx;
 
-NXS_DLL NXSErr nexusBuild(const char *input, const char *output)
-{
 #ifdef INITIALIZE_STATIC_LIBJPEG
 	Q_IMPORT_PLUGIN(QJpegPlugin);
 #endif
 
+NXS_DLL NXSErr nexusBuild(const char *input, const char *output, char *errorMessage, int errorMessageSize)
+{
+
 	// Validate parameters
 	if (!input || !output)
 	{
+		if (errorMessage && errorMessageSize > 0) {
+			strncpy(errorMessage, "Input or output parameter is null", errorMessageSize - 1);
+			errorMessage[errorMessageSize - 1] = '\0';
+		}
 		return NXSERR_INVALID_INPUT;
 	}
 
@@ -55,10 +63,16 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output)
 	QFile file(input);
 	if (!file.exists())
 	{
+		if (errorMessage && errorMessageSize > 0) {
+			std::string errMsg = std::string("Input file does not exist: ") + input;
+			strncpy(errorMessage, errMsg.c_str(), errorMessageSize - 1);
+			errorMessage[errorMessageSize - 1] = '\0';
+		}
 		return NXSERR_INVALID_INPUT;
 	}
 
-	// we create a QCoreApplication just so that QT loads image IO plugins (for jpg and tiff loading)
+	qDebug() << "Supported image formats: " << QImageReader::supportedImageFormats();
+
 	constexpr int node_size = 1 << 15;
 	constexpr float texel_weight = 0.1; // relative weight of texels.
 	constexpr int top_node_size = 4096;
@@ -160,7 +174,10 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output)
 		bool success = builder.initAtlas(stream->textures);
 		if (!success)
 		{
-			// cerr << "Exiting" << endl;
+			if (errorMessage && errorMessageSize > 0) {
+				strncpy(errorMessage, "Failed to initialize texture atlas", errorMessageSize - 1);
+				errorMessage[errorMessageSize - 1] = '\0';
+			}
 			return NXSERR_EXCEPTION;
 		}
 
@@ -222,7 +239,11 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output)
 
 			if (!nexus.open(inputs[0].toLatin1()))
 			{
-				// cerr << "Fatal error: could not open file " << qPrintable(inputs[0]) << endl;
+				if (errorMessage && errorMessageSize > 0) {
+					std::string errMsg = std::string("Could not open file: ") + inputs[0].toStdString();
+					strncpy(errorMessage, errMsg.c_str(), errorMessageSize - 1);
+					errorMessage[errorMessageSize - 1] = '\0';
+				}
 				return NXSERR_EXCEPTION;
 			}
 
@@ -273,7 +294,11 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output)
 				signature.flags |= Signature::CORTO;
 			else
 			{
-				// cerr << "Unknown compression method: " << qPrintable(compresslib) << endl;
+				if (errorMessage && errorMessageSize > 0) {
+					std::string errMsg = std::string("Unknown compression method: ") + compresslib.toStdString();
+					strncpy(errorMessage, errMsg.c_str(), errorMessageSize - 1);
+					errorMessage[errorMessageSize - 1] = '\0';
+				}
 				return NXSERR_EXCEPTION;
 			}
 			if (coord_step)
@@ -334,12 +359,21 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output)
 	}
 	catch (QString error)
 	{
-		// cerr << "Fatal error: " << qPrintable(error) << endl;
+		cerr << "Fatal error: " << qPrintable(error) << endl;
+		if (errorMessage && errorMessageSize > 0) {
+			QByteArray ba = error.toLatin1();
+			strncpy(errorMessage, ba.data(), errorMessageSize - 1);
+			errorMessage[errorMessageSize - 1] = '\0';
+		}
 		returncode = NXSERR_EXCEPTION;
 	}
 	catch (const char *error)
 	{
-		// cerr << "Fatal error: " << error << endl;
+		cerr << "Fatal error: " << error << endl;
+		if (errorMessage && errorMessageSize > 0) {
+			strncpy(errorMessage, error, errorMessageSize - 1);
+			errorMessage[errorMessageSize - 1] = '\0';
+		}
 		returncode = NXSERR_EXCEPTION;
 	}
 

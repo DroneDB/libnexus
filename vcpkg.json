@@ -4,9 +4,10 @@
     "dependencies": [
         {
             "name": "qt5",
-            "features": ["essentials"]
+            "default-features": false,
+            "features": ["imageformats"]
         }
     ],
-    "builtin-baseline": "3edabbe1407e2d4d8ce5b78bab8abf42cc966d10"
+    "builtin-baseline": "b1b19307e2d2ec1eefbdb7ea069de7d4bcd31f01"
 
 }

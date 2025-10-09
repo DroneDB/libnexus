@@ -19,7 +19,7 @@ enum NXSErr {
     NXSERR_INVALID_INPUT = 2 // Invalid input
 };
 
-NXS_DLL NXSErr nexusBuild(const char *input, const char *output);
+NXS_DLL NXSErr nexusBuild(const char *input, const char *output, char *errorMessage = nullptr, int errorMessageSize = 0);
 
 #ifdef __cplusplus
 }
