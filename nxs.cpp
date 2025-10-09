@@ -71,7 +71,9 @@ NXS_DLL NXSErr nexusBuild(const char *input, const char *output, char *errorMess
 		return NXSERR_INVALID_INPUT;
 	}
 
-	qDebug() << "Supported image formats: " << QImageReader::supportedImageFormats();
+	#if DEBUG
+		qDebug() << "Supported image formats: " << QImageReader::supportedImageFormats();
+	#endif
 
 	constexpr int node_size = 1 << 15;
 	constexpr float texel_weight = 0.1; // relative weight of texels.
