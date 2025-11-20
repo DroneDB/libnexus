@@ -1,388 +1,434 @@
-/*
-Nexus
-
-Copyright(C) 2012 - Federico Ponchio
-ISTI - Italian National Research Council - Visual Computing Lab
-
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
-for more details.
-*/
-
 #include "nxs.h"
-#include <iostream>
-#include <iomanip>
-#include <thread>
-#include <mutex>
+
+#include <locale.h>
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QImageReader>
+#include <QLocale>
 #include <QStringList>
 #include <QtPlugin>
-#include <QImageReader>
+#include <chrono>
+#include <cmath>
+#include <cstring>
+#include <iomanip>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <thread>
+
+#ifdef WIN32
+#include <windows.h>
+#endif
 
 #include <wrap/system/qgetopt.h>
 
-#include "meshstream.h"
-#include "kdtree.h"
-#include "../nxsbuild/nexusbuilder.h"
 #include "../common/qtnexusfile.h"
 #include "../common/traversal.h"
+#include "../nxsbuild/nexusbuilder.h"
 #include "../nxsedit/extractor.h"
-#include "plyloader.h"
+#include "kdtree.h"
+#include "meshstream.h"
 #include "objloader.h"
+#include "plyloader.h"
 #include "tsploader.h"
 
 using namespace std;
 using namespace nx;
 
 #ifdef INITIALIZE_STATIC_LIBJPEG
-	Q_IMPORT_PLUGIN(QJpegPlugin);
+Q_IMPORT_PLUGIN(QJpegPlugin);
 #endif
 
-NXS_DLL NXSErr nexusBuild(const char *input, const char *output, char *errorMessage, int errorMessageSize)
-{
+// =====================================================================
+// Internal helpers (RAII, Qt init, locale management)
+// =====================================================================
 
-	// Validate parameters
-	if (!input || !output)
-	{
-		if (errorMessage && errorMessageSize > 0) {
-			strncpy(errorMessage, "Input or output parameter is null", errorMessageSize - 1);
-			errorMessage[errorMessageSize - 1] = '\0';
-		}
-		return NXSERR_INVALID_INPUT;
-	}
+namespace {
 
-	// Check if input file exists
-	QFile file(input);
-	if (!file.exists())
-	{
-		if (errorMessage && errorMessageSize > 0) {
-			std::string errMsg = std::string("Input file does not exist: ") + input;
-			strncpy(errorMessage, errMsg.c_str(), errorMessageSize - 1);
-			errorMessage[errorMessageSize - 1] = '\0';
-		}
-		return NXSERR_INVALID_INPUT;
-	}
+void setErrorMessage(char* buffer, int bufferSize, const std::string& message) {
+    if (!buffer || bufferSize <= 0)
+        return;
+    std::strncpy(buffer, message.c_str(), bufferSize - 1);
+    buffer[bufferSize - 1] = '\0';
+}
 
-	#if DEBUG
-		qDebug() << "Supported image formats: " << QImageReader::supportedImageFormats();
-	#endif
+void setErrorMessage(char* buffer, int bufferSize, const QString& message) {
+    if (!buffer || bufferSize <= 0)
+        return;
+    QByteArray ba = message.toLatin1();
+    std::strncpy(buffer, ba.constData(), bufferSize - 1);
+    buffer[bufferSize - 1] = '\0';
+}
 
-	constexpr int node_size = 1 << 15;
-	constexpr float texel_weight = 0.1; // relative weight of texels.
-	constexpr int top_node_size = 4096;
-	constexpr float vertex_quantization = 0.0f; // optionally quantize vertices position.
-	constexpr int tex_quality(95);			  // default jpg texture quality
-	constexpr int ram_buffer(16000);			  // Mb of ram to use
-	constexpr float scaling(0.5); // simplification ratio
-	constexpr int skiplevels = 0;
+void setErrorMessage(char* buffer, int bufferSize, const char* message) {
+    if (!buffer || bufferSize <= 0)
+        return;
+    std::strncpy(buffer, message, bufferSize - 1);
+    buffer[bufferSize - 1] = '\0';
+}
 
-	QString mtl;
-	QString translate;
-	// bool center = false;
+// RAII: set LC_NUMERIC to "C" during this scope and restore previous value.
+class NumericLocaleGuard {
+public:
+    NumericLocaleGuard() {
+        const char* current = std::setlocale(LC_NUMERIC, nullptr);
+        if (current) {
+            oldLocale_ = current;
+        }
+        std::setlocale(LC_NUMERIC, "C");
+    }
 
-	bool point_cloud = false;
-	bool normals = false;
-	bool no_normals = false;
-	bool colors = false;
-	bool no_colors = false;
-	bool no_texcoords = false;
-	bool useOrigTex = false;
-	bool create_pow_two_tex = false;
-	bool deepzoom = false;
+    ~NumericLocaleGuard() {
+        if (!oldLocale_.empty()) {
+            std::setlocale(LC_NUMERIC, oldLocale_.c_str());
+        }
+    }
 
-	// BTREE options
-	float adaptive = 0.333f;
+private:
+    std::string oldLocale_;
+};
 
-	// Check parameters are correct
-	QStringList inputs;
-	inputs.append(input);
+// RAII: set QLocale::default to C for this scope and restore previous.
+class QLocaleGuard {
+public:
+    QLocaleGuard() : oldLocale_(QLocale()) { QLocale::setDefault(QLocale::c()); }
 
-	vcg::Point3d origin(0, 0, 0);
+    ~QLocaleGuard() { QLocale::setDefault(oldLocale_); }
 
-	Stream *stream = 0;
-	KDTree *tree = 0;
-	NXSErr returncode = NXSERR_NONE;
-	try
-	{
-		quint64 max_memory = (1 << 20) * (uint64_t)ram_buffer / 4; // hack 4 is actually an estimate...
+private:
+    QLocale oldLocale_;
+};
 
-		string input = "mesh";
-		stream = new StreamSoup("cache_stream");
+// RAII: remove a file on destruction if path is not empty.
+class TempFileGuard {
+public:
+    TempFileGuard() = default;
+    explicit TempFileGuard(const QString& path) : path_(path) {}
 
-		stream->setVertexQuantization(vertex_quantization);
-		stream->setMaxMemory(max_memory);
-		stream->origin = origin;
+    void setPath(const QString& path) { path_ = path; }
+    const QString& path() const { return path_; }
 
-		vcg::Point3d &o = stream->origin;
+    ~TempFileGuard() {
+        if (!path_.isEmpty()) {
+            QFile::remove(path_);
+        }
+    }
 
-		// TODO: actually the stream will store textures or normals or colors even if not needed
-		stream->load(inputs, mtl);
+private:
+    QString path_;
+};
 
-		bool has_colors = stream->hasColors();
-		bool has_normals = stream->hasNormals();
-		bool has_textures = stream->hasTextures();
+// Initialize Qt core application and plugin paths once, in a thread-safe way.
+void initializeQtEnvironment() {
+    static std::once_flag qtInitFlag;
 
-		// cout << "Components: " << input;
-		// if(has_normals) cout << " normals";
-		// if(has_colors) cout << " colors";
-		// if(has_textures) cout << " textures";
-		// cout << "\n";
+    std::call_once(qtInitFlag, []() {
+        // If the host process is already a Qt application, do not create another instance.
+        if (!QCoreApplication::instance()) {
+            static int argc = 1;
+            static char appName[] = "nexusBuild";
+            static char* argv[] = {appName, nullptr};
 
-		quint32 components = 0;
-		if (!point_cloud)
-			components |= NexusBuilder::FACES;
+            // Static instance, lives for the whole process lifetime.
+            static QCoreApplication app(argc, argv);
+            Q_UNUSED(app);
+        }
 
-		if ((!no_normals && (!point_cloud || has_normals)) || normals)
-		{
-			components |= NexusBuilder::NORMALS;
-			// cout << "Normals enabled\n";
-		}
-		if ((has_colors && !no_colors) || colors)
-		{
-			components |= NexusBuilder::COLORS;
-			// cout << "Colors enabled\n";
-		}
-		if (has_textures && !no_texcoords)
-		{
-			components |= NexusBuilder::TEXTURES;
-			// cout << "Textures enabled\n";
-		}
+#ifdef WIN32
+        // On Windows, derive plugin path from this DLL location.
+        HMODULE hModule = nullptr;
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               reinterpret_cast<LPCSTR>(&initializeQtEnvironment),
+                               &hModule)) {
+            char dllPath[MAX_PATH] = {};
+            if (GetModuleFileNameA(hModule, dllPath, MAX_PATH) > 0) {
+                QFileInfo dllInfo(QString::fromLocal8Bit(dllPath));
+                QString pluginPath = dllInfo.absolutePath() + "/plugins";
 
-		// WORKAROUND to save loading textures not needed
-		if (!(components & NexusBuilder::TEXTURES))
-		{
-			stream->textures.clear();
-		}
+                if (QDir(pluginPath).exists()) {
+                    QCoreApplication::addLibraryPath(pluginPath);
+#if defined(DEBUG)
+                    qDebug() << "Added Qt plugin path: " << pluginPath;
+                    qDebug() << "Qt library paths: " << QCoreApplication::libraryPaths();
+#endif
+                }
+            }
+        }
+#else
+        // On Unix-like systems, fall back to the application directory.
+        QString appPath    = QCoreApplication::applicationDirPath();
+        QString pluginPath = appPath + "/plugins";
+        if (QDir(pluginPath).exists()) {
+            QCoreApplication::addLibraryPath(pluginPath);
+        }
+#endif
+    });
+}
 
-		NexusBuilder builder(components);
-		builder.skipSimplifyLevels = skiplevels;
-		builder.setMaxMemory(max_memory);
-		int n_threads = std::thread::hardware_concurrency();
-		builder.n_threads = n_threads == 0 ? 1 : n_threads;
-		builder.setScaling(scaling);
-		builder.useNodeTex = !useOrigTex;
-		builder.createPowTwoTex = create_pow_two_tex;
-		if (deepzoom)
-			builder.header.signature.flags |= nx::Signature::Flags::DEEPZOOM;
-		builder.tex_quality = tex_quality;
-		bool success = builder.initAtlas(stream->textures);
-		if (!success)
-		{
-			if (errorMessage && errorMessageSize > 0) {
-				strncpy(errorMessage, "Failed to initialize texture atlas", errorMessageSize - 1);
-				errorMessage[errorMessageSize - 1] = '\0';
-			}
-			return NXSERR_EXCEPTION;
-		}
+// Internal implementation used by both nexusBuild and nexusBuildEx.
+NXSErr doNexusBuild(const char* input,
+                    const char* output,
+                    const NexusBuildOptions& opts,
+                    char* errorMessage,
+                    int errorMessageSize) {
+    // Basic parameter checks
+    if (!input || !output) {
+        setErrorMessage(errorMessage, errorMessageSize, "Input or output parameter is null");
+        return NXSERR_INVALID_INPUT;
+    }
 
-		tree = new KDTreeSoup("cache_tree", adaptive);
-		tree->setMaxMemory((1 << 20) * (uint64_t)ram_buffer / 2);
-		KDTreeSoup *treesoup = dynamic_cast<KDTreeSoup *>(tree);
-		if (treesoup)
-		{
-			treesoup->setMaxWeight(node_size);
-			treesoup->texelWeight = texel_weight;
-			treesoup->setTrianglesPerBlock(node_size);
-		}
+    QFile inputFile(QString::fromUtf8(input));
+    if (!inputFile.exists()) {
+        setErrorMessage(errorMessage,
+                        errorMessageSize,
+                        std::string("Input file does not exist: ") + input);
+        return NXSERR_INVALID_INPUT;
+    }
 
-		builder.create(tree, stream, top_node_size);
-		QString qOutput(output);
-		bool compress = qOutput.endsWith(".nxz");
-		if (compress)
-		{
-			// Generate temporary uncompressed file first
-			qOutput = qOutput + ".tmp.nxs";
-		}
+    try {
+        // Initialize Qt (thread-safe, once per process)
+        initializeQtEnvironment();
 
-		builder.save(qOutput);
+        // Use "C" numeric locale for this operation only.
+        NumericLocaleGuard numericLocaleGuard;
+        QLocaleGuard qtLocaleGuard;
 
-		if (compress)
-		{
+#if defined(DEBUG)
+        qDebug() << "Supported image formats: " << QImageReader::supportedImageFormats();
+#endif
 
-			float coord_step = 0.0f; // approxismate step for quantization
-			int position_bits = 0;
-			float error_q = 0.1;
-			int luma_bits = 6;
-			int chroma_bits = 6;
-			int alpha_bits = 5;
-			int norm_bits = 10;
-			float tex_step = 0.25;
+        const quint64 max_memory =
+            (quint64(1) << 20) * static_cast<quint64>(opts.ram_buffer_mb) / 4;
 
-			double error(-1.0);
-			double max_size(0.0);
-			int max_triangles(0.0);
-			int max_level(-1);
-			QString projection("");
-			QString matrix("");
-			QString imatrix("");
-			QString compresslib("corto");
+        QStringList inputs;
+        inputs.append(QString::fromUtf8(input));
 
-			bool info = false;
-			bool check = false;
-			bool drop_level = false;
-			QString recompute_error;
+        vcg::Point3d origin(0, 0, 0);
 
-			inputs.clear();
-			inputs.append(qOutput);
+        std::unique_ptr<Stream> stream;
+        std::unique_ptr<KDTree> tree;
 
-			NexusData nexus;
-			nexus.file = new QTNexusFile();
-			bool read_only = true;
-			if (!recompute_error.isEmpty())
-				read_only = false;
+        // Build a somewhat unique base name for cache files
+        using Clock = std::chrono::steady_clock;
+        auto now = Clock::now().time_since_epoch().count();
+        std::string cacheBase =
+            "nexus_cache_" + std::to_string(static_cast<unsigned long long>(now));
 
-			if (!nexus.open(inputs[0].toLatin1()))
-			{
-				if (errorMessage && errorMessageSize > 0) {
-					std::string errMsg = std::string("Could not open file: ") + inputs[0].toStdString();
-					strncpy(errorMessage, errMsg.c_str(), errorMessageSize - 1);
-					errorMessage[errorMessageSize - 1] = '\0';
-				}
-				return NXSERR_EXCEPTION;
-			}
+        // Create and load mesh stream
+        {
+            auto streamImpl = std::make_unique<StreamSoup>((cacheBase + "_stream").c_str());
+            streamImpl->setVertexQuantization(opts.vertex_quantization);
+            streamImpl->setMaxMemory(max_memory);
+            streamImpl->origin = origin;
 
-			QString qCompressedOutput(output);
+            QString mtl;  // not exposed yet
+            streamImpl->load(inputs, mtl);
 
-			Extractor extractor(&nexus);
+            stream = std::move(streamImpl);
+        }
 
-			// if(max_size != 0.0)
-			// 	extractor.selectBySize(max_size*(1<<20));
+        const bool has_colors = stream->hasColors();
+        const bool has_normals = stream->hasNormals();
+        const bool has_textures = stream->hasTextures();
 
-			// if(error != -1)
-			// 	extractor.selectByError(error);
+        quint32 components = 0;
+        if (!opts.point_cloud)
+            components |= NexusBuilder::FACES;
 
-			// if(max_triangles != 0)
-			// 	extractor.selectByTriangles(max_triangles);
+        if ((!opts.disable_normals && (!opts.point_cloud || has_normals)) || opts.force_normals) {
+            components |= NexusBuilder::NORMALS;
+        }
 
-			// if(max_level >= 0)
-			// 	extractor.selectByLevel(max_level);
+        if ((has_colors && !opts.disable_colors) || opts.force_colors) {
+            components |= NexusBuilder::COLORS;
+        }
 
-			// if(drop_level)
-			// 	extractor.dropLevel();
+        if (has_textures && !opts.disable_texcoords) {
+            components |= NexusBuilder::TEXTURES;
+        }
 
-			// bool invert = false;
-			// if(!imatrix.isEmpty()) {
-			// 	matrix = imatrix;
-			// 	invert = true;
-			// }
-			// if(!matrix.isEmpty()) {
-			// 	QStringList sl = matrix.split(":");
-			// 	if(sl.size() != 16) {
-			// 		cerr << "Wrong matrix: found only " << sl.size() << " elements" << endl;
-			// 		exit(-1);
-			// 	}
-			// 	vcg::Matrix44f m;
-			// 	for(int i = 0; i < sl.size(); i++)
-			// 		m.V()[i] = sl.at(i).toFloat();
-			// 	//if(invert)
-			// 	//    m = vcg::Invert(m);
+        // Do not keep textures if they are not going to be used
+        if (!(components & NexusBuilder::TEXTURES)) {
+            stream->textures.clear();
+        }
 
-			// 	extractor.setMatrix(m);
-			// }
+        NexusBuilder builder(components);
+        builder.skipSimplifyLevels = opts.skip_levels;
+        builder.setMaxMemory(max_memory);
 
-			Signature signature = nexus.header.signature;
-			signature.flags &= ~(Signature::MECO | Signature::CORTO);
-			if (compresslib == "meco")
-				signature.flags |= Signature::MECO;
-			else if (compresslib == "corto")
-				signature.flags |= Signature::CORTO;
-			else
-			{
-				if (errorMessage && errorMessageSize > 0) {
-					std::string errMsg = std::string("Unknown compression method: ") + compresslib.toStdString();
-					strncpy(errorMessage, errMsg.c_str(), errorMessageSize - 1);
-					errorMessage[errorMessageSize - 1] = '\0';
-				}
-				return NXSERR_EXCEPTION;
-			}
-			if (coord_step)
-			{								  // global precision, absolute value
-				extractor.error_factor = 0.0; // ignore error factor.
-				// do nothing
-			}
-			else if (position_bits)
-			{
-				vcg::Sphere3f &sphere = nexus.header.sphere;
-				coord_step = sphere.Radius() / pow(2.0f, position_bits);
-				extractor.error_factor = 0.0;
-			}
-			else if (error_q)
-			{
-				// take node 0:
-				uint32_t sink = nexus.header.n_nodes - 1;
-				coord_step = error_q * nexus.nodes[0].error / 2;
-				for (unsigned int i = 0; i < sink; i++)
-				{
-					Node &n = nexus.nodes[i];
-					Patch &patch = nexus.patches[n.first_patch];
-					if (patch.node != sink)
-						continue;
-					double e = error_q * n.error / 2;
-					if (e < coord_step && e > 0)
-						coord_step = e; // we are looking at level1 error, need level0 estimate.
-				}
-				extractor.error_factor = error_q;
-			}
-			// cout << "Vertex quantization step: " << coord_step << endl;
-			// cout << "Texture quantization step: " << tex_step << endl;
-			extractor.coord_q = (int)log2(coord_step);
-			extractor.norm_bits = norm_bits;
-			extractor.color_bits[0] = luma_bits;
-			extractor.color_bits[1] = chroma_bits;
-			extractor.color_bits[2] = chroma_bits;
-			extractor.color_bits[3] = alpha_bits;
-			extractor.tex_step = tex_step; // was (int)log2(tex_step * pow(2, -12));, moved to per node value
-			// cout << "Texture step: " << extractor.tex_step << endl;
+        int n_threads = static_cast<int>(std::thread::hardware_concurrency());
+        builder.n_threads = n_threads == 0 ? 1 : n_threads;
 
-			// cout << "Saving with flag: " << signature.flags;
-			/*if (signature.flags & Signature::MECO) cout << " (compressed with MECO)";
-			else if (signature.flags & Signature::CORTO) cout << " (compressed with CORTO)";
-			else cout << " (not compressed)";
-			cout << endl;*/
+        builder.setScaling(opts.scaling);
+        builder.useNodeTex = !opts.use_original_textures;
+        builder.createPowTwoTex = opts.create_pow_two_textures;
 
-			extractor.save(qCompressedOutput, signature);
+        if (opts.deepzoom) {
+            builder.header.signature.flags |= nx::Signature::Flags::DEEPZOOM;
+        }
 
-			// cout << "Saving to file " << qPrintable(output) << endl;
-		}
+        builder.tex_quality = opts.texture_quality;
 
-		if (compress)
-		{
-			// Remove old tmp file
-			QFile::remove(qOutput);
-		}
-	}
-	catch (QString error)
-	{
-		cerr << "Fatal error: " << qPrintable(error) << endl;
-		if (errorMessage && errorMessageSize > 0) {
-			QByteArray ba = error.toLatin1();
-			strncpy(errorMessage, ba.data(), errorMessageSize - 1);
-			errorMessage[errorMessageSize - 1] = '\0';
-		}
-		returncode = NXSERR_EXCEPTION;
-	}
-	catch (const char *error)
-	{
-		cerr << "Fatal error: " << error << endl;
-		if (errorMessage && errorMessageSize > 0) {
-			strncpy(errorMessage, error, errorMessageSize - 1);
-			errorMessage[errorMessageSize - 1] = '\0';
-		}
-		returncode = NXSERR_EXCEPTION;
-	}
+        if (!builder.initAtlas(stream->textures)) {
+            setErrorMessage(errorMessage, errorMessageSize, "Failed to initialize texture atlas");
+            return NXSERR_EXCEPTION;
+        }
 
-	if (tree)
-		delete tree;
-	if (stream)
-		delete stream;
+        // Create KD-tree
+        {
+            auto treeImpl =
+                std::make_unique<KDTreeSoup>((cacheBase + "_tree").c_str(), opts.adaptive);
+            treeImpl->setMaxMemory((quint64(1) << 20) * static_cast<quint64>(opts.ram_buffer_mb) /
+                                   2);
 
-	return returncode;
+            treeImpl->setMaxWeight(opts.node_faces);
+            treeImpl->texelWeight = opts.texel_weight;
+            treeImpl->setTrianglesPerBlock(opts.node_faces);
+
+            tree = std::move(treeImpl);
+        }
+
+        // Build the hierarchy
+        builder.create(tree.get(), stream.get(), opts.top_node_faces);
+
+        // Output handling (.nxs vs .nxz)
+        QString finalOutput = QString::fromUtf8(output);
+        bool hasNxzExtension = finalOutput.endsWith(".nxz", Qt::CaseInsensitive);
+        bool doCompression = hasNxzExtension && opts.enable_compression;
+
+        QString builderOutput = finalOutput;
+        if (doCompression) {
+            // If compression is enabled, write a temporary .nxs file first
+            builderOutput += ".tmp.nxs";
+        }
+
+        builder.save(builderOutput);
+
+        if (doCompression) {
+            // Ensure temporary .nxs is always removed
+            TempFileGuard tempNxsGuard(builderOutput);
+
+            QStringList nexusInputs;
+            nexusInputs.append(builderOutput);
+
+            NexusData nexus;
+            nexus.file = new QTNexusFile();
+
+            if (!nexus.open(nexusInputs[0].toLatin1())) {
+                setErrorMessage(
+                    errorMessage,
+                    errorMessageSize,
+                    std::string("Could not open file: ") + nexusInputs[0].toStdString());
+                return NXSERR_EXCEPTION;
+            }
+
+            // Validate compression library
+            Signature signature = nexus.header.signature;
+            signature.flags &= ~(Signature::MECO | Signature::CORTO);
+
+            if (opts.compress_lib == "meco") {
+                signature.flags |= Signature::MECO;
+            } else if (opts.compress_lib == "corto") {
+                signature.flags |= Signature::CORTO;
+            } else {
+                setErrorMessage(errorMessage,
+                                errorMessageSize,
+                                std::string("Unknown compression method: ") + opts.compress_lib);
+                return NXSERR_EXCEPTION;
+            }
+
+            Extractor extractor(&nexus);
+
+            // Determine coord_step
+            float coord_step = opts.coord_step;
+            if (coord_step > 0.0f) {
+                extractor.error_factor = 0.0f;
+            } else if (opts.position_bits > 0) {
+                vcg::Sphere3f& sphere = nexus.header.sphere;
+                coord_step = sphere.Radius() / std::pow(2.0f, opts.position_bits);
+                extractor.error_factor = 0.0f;
+            } else if (opts.error_q > 0.0f) {
+                uint32_t sink = nexus.header.n_nodes - 1;
+                coord_step = opts.error_q * nexus.nodes[0].error / 2.0f;
+                for (uint32_t i = 0; i < sink; ++i) {
+                    Node& n = nexus.nodes[i];
+                    Patch& patch = nexus.patches[n.first_patch];
+                    if (patch.node != sink)
+                        continue;
+                    double e = opts.error_q * n.error / 2.0;
+                    if (e < coord_step && e > 0.0)
+                        coord_step = static_cast<float>(e);
+                }
+                extractor.error_factor = opts.error_q;
+            }
+
+            // Fallback to avoid log2(0) if coord_step is still <= 0
+            if (coord_step <= 0.0f) {
+                coord_step = 1.0f;
+                extractor.error_factor = 0.0f;
+            }
+
+            extractor.coord_q = static_cast<int>(std::log2(coord_step));
+            extractor.norm_bits = opts.normal_bits;
+
+            extractor.color_bits[0] = opts.luma_bits;
+            extractor.color_bits[1] = opts.chroma_bits;
+            extractor.color_bits[2] = opts.chroma_bits;
+            extractor.color_bits[3] = opts.alpha_bits;
+
+            extractor.tex_step = opts.tex_step;
+
+            // Save final compressed file (.nxz)
+            extractor.save(finalOutput, signature);
+        }
+
+        return NXSERR_NONE;
+    } catch (const QString& error) {
+        std::cerr << "Fatal error (QString): " << error.toStdString() << std::endl;
+        setErrorMessage(errorMessage, errorMessageSize, error);
+        return NXSERR_EXCEPTION;
+    } catch (const std::exception& e) {
+        std::cerr << "Fatal error (std::exception): " << e.what() << std::endl;
+        setErrorMessage(errorMessage, errorMessageSize, std::string("Exception: ") + e.what());
+        return NXSERR_EXCEPTION;
+    } catch (const char* error) {
+        std::cerr << "Fatal error (const char*): " << error << std::endl;
+        setErrorMessage(errorMessage, errorMessageSize, std::string(error));
+        return NXSERR_EXCEPTION;
+    } catch (...) {
+        std::cerr << "Fatal error: unknown exception in nexusBuild()" << std::endl;
+        setErrorMessage(errorMessage,
+                        errorMessageSize,
+                        std::string("Unknown exception in nexusBuild"));
+        return NXSERR_EXCEPTION;
+    }
+}
+
+}  // namespace
+
+
+// =====================================================================
+// Public API
+// =====================================================================
+
+// New extended function using NexusBuildOptions.
+NXS_DLL NXSErr nexusBuildEx(const char* input,
+                            const char* output,
+                            const NexusBuildOptions& options,
+                            char* errorMessage,
+                            int errorMessageSize) {
+    return doNexusBuild(input, output, options, errorMessage, errorMessageSize);
+}
+
+// Original function signature kept for backwards compatibility.
+// Uses default NexusBuildOptions.
+NXS_DLL NXSErr nexusBuild(const char* input,
+                          const char* output,
+                          char* errorMessage,
+                          int errorMessageSize) {
+    NexusBuildOptions defaultOptions;  // keep current libnexus defaults
+    return doNexusBuild(input, output, defaultOptions, errorMessage, errorMessageSize);
 }
