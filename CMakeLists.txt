@@ -10,7 +10,7 @@ endif()
 
 find_package(Qt5 REQUIRED COMPONENTS Core Gui)
 
-set (CMAKE_CXX_STANDARD 11)
+set (CMAKE_CXX_STANDARD 14)
 
 option(BUILD_NXS_TEST "" OFF)
 
