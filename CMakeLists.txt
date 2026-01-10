@@ -69,6 +69,26 @@ if (WIN32)
 endif()
 target_link_libraries(nxs PUBLIC Qt5::Core Qt5::Gui nexus ${ADDITIONAL_LIBS})
 
+# Copy Qt plugins (imageformats, platforms, styles) to the output directory
+# This is required for WebP texture support on Windows
+if (WIN32)
+    get_target_property(QT5_CORE_LOCATION Qt5::Core LOCATION)
+    get_filename_component(QT5_BIN_DIR "${QT5_CORE_LOCATION}" DIRECTORY)
+    # Qt plugins are typically in ../plugins relative to bin
+    get_filename_component(QT5_PLUGINS_DIR "${QT5_BIN_DIR}/../plugins" ABSOLUTE)
+
+    add_custom_command(TARGET nxs POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Copying Qt plugins for libnexus..."
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:nxs>/plugins/imageformats"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:nxs>/plugins/platforms"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:nxs>/plugins/styles"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${QT5_PLUGINS_DIR}/imageformats" "$<TARGET_FILE_DIR:nxs>/plugins/imageformats"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${QT5_PLUGINS_DIR}/platforms" "$<TARGET_FILE_DIR:nxs>/plugins/platforms"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${QT5_PLUGINS_DIR}/styles" "$<TARGET_FILE_DIR:nxs>/plugins/styles"
+        COMMENT "Copying Qt plugins for WebP and other image format support"
+    )
+endif()
+
 install(TARGETS nxs EXPORT nxs DESTINATION lib)
 install(FILES nxs.h DESTINATION include)
 install(FILES cmake/nxs-config.cmake DESTINATION share/cmake/nxs)
