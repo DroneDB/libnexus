@@ -211,11 +211,20 @@ NXSErr doNexusBuild(const char* input,
         std::unique_ptr<Stream> stream;
         std::unique_ptr<KDTree> tree;
 
-        // Build a somewhat unique base name for cache files
+        // Build a somewhat unique base name for cache files.
+        // Place the out-of-core cache (stream + kd-tree) in the same directory as
+        // the output, which under the DroneDB build pipeline is the per-build temp
+        // folder. This keeps the (potentially multi-GB) scratch on the same large
+        // volume as the result and lets it be reclaimed together with that folder,
+        // instead of defaulting to the system temp dir. VirtualMemory uses an
+        // absolute template prefix as-is.
         using Clock = std::chrono::steady_clock;
         auto now = Clock::now().time_since_epoch().count();
+        const QString cacheDir = QFileInfo(QString::fromUtf8(output)).absolutePath();
         std::string cacheBase =
-            "nexus_cache_" + std::to_string(static_cast<unsigned long long>(now));
+            (cacheDir + "/nexus_cache_" +
+             QString::number(static_cast<qulonglong>(now)))
+                .toStdString();
 
         // Create and load mesh stream
         {
@@ -255,7 +264,10 @@ NXSErr doNexusBuild(const char* input,
             stream->textures.clear();
         }
 
-        NexusBuilder builder(components);
+        // Place the builder's out-of-core caches (chunks + per-node texture file)
+        // in the same directory as the output (the per-build temp folder), so they
+        // do not leak into the process working directory and are reclaimed with it.
+        NexusBuilder builder(components, cacheDir);
         builder.skipSimplifyLevels = opts.skip_levels;
         builder.setMaxMemory(max_memory);
 
