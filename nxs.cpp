@@ -24,7 +24,6 @@
 
 #include <wrap/system/qgetopt.h>
 
-#include "../common/qtnexusfile.h"
 #include "../common/traversal.h"
 #include "../nxsbuild/nexusbuilder.h"
 #include "../nxsedit/extractor.h"
@@ -326,8 +325,7 @@ NXSErr doNexusBuild(const char* input,
             QStringList nexusInputs;
             nexusInputs.append(builderOutput);
 
-            NexusData nexus;
-            nexus.file = new QTNexusFile();
+            NexusData nexus;  // its constructor creates and owns the QTNexusFile
 
             if (!nexus.open(nexusInputs[0].toLatin1())) {
                 setErrorMessage(
