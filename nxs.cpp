@@ -130,9 +130,13 @@ void initializeQtEnvironment() {
             static char appName[] = "nexusBuild";
             static char* argv[] = {appName, nullptr};
 
-            // Static instance, lives for the whole process lifetime.
-            static QCoreApplication app(argc, argv);
-            Q_UNUSED(app);
+            // Never deleted, on purpose. A static QCoreApplication would be destroyed by exit()
+            // on the thread that ends the process, but it is created by the first build, which
+            // a host (a service running its jobs on worker threads) runs on a thread that is
+            // long gone by then: its destructor reads the dead thread's data and the process
+            // crashes (SIGSEGV) after the work was done. The operating system reclaims the
+            // instance when the process ends.
+            new QCoreApplication(argc, argv);
         }
 
 #ifdef WIN32
