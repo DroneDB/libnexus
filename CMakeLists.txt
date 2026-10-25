@@ -67,10 +67,36 @@ set(ADDITIONAL_LIBS "")
 if (WIN32)
 	list(APPEND ADDITIONAL_LIBS netapi32 wsock32 ws2_32 userenv version winmm)
 endif()
-target_link_libraries(nxs PUBLIC Qt5::Core Qt5::Gui nexus ${ADDITIONAL_LIBS})
+# Qt and nexus are PRIVATE: nxs is a shared library that carries them (Qt is static on Linux),
+# and a program linking nxs must not pull a second copy of them into its own image.
+target_link_libraries(nxs PRIVATE Qt5::Core Qt5::Gui nexus ${ADDITIONAL_LIBS})
+
+# ddb-nexus: command line front end of nxs. DroneDB runs it as a separate process instead of
+# loading nxs into its own, so the Nexus / VCGLib / Qt code never shares an address space with
+# the host. The version it reports is set by the parent project (DroneDB's APP_VERSION).
+if (NOT DEFINED DDB_NEXUS_VERSION)
+	if (DEFINED APP_VERSION)
+		set(DDB_NEXUS_VERSION "${APP_VERSION}")
+	else()
+		set(DDB_NEXUS_VERSION "unknown")
+	endif()
+endif()
+
+find_package(Threads REQUIRED)
+add_executable(ddb-nexus ddb_nexus_main.cpp)
+target_compile_definitions(ddb-nexus PRIVATE DDB_NEXUS_VERSION="${DDB_NEXUS_VERSION}")
+target_include_directories(ddb-nexus PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_link_libraries(ddb-nexus PRIVATE nxs Threads::Threads)
+if (UNIX AND NOT APPLE)
+	# libnxs.so next to the program (zip / build tree) or in ../lib (an installed prefix)
+	set_target_properties(ddb-nexus PROPERTIES
+		BUILD_WITH_INSTALL_RPATH ON
+		INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib")
+endif()
 
 # Copy Qt plugins (imageformats, platforms, styles) to the output directory
-# This is required for WebP texture support on Windows
+# This is required for WebP texture support on Windows. nxs.dll and ddb-nexus.exe share the
+# runtime output directory, and nxs looks for "plugins" next to the DLL.
 if (WIN32)
     get_target_property(QT5_CORE_LOCATION Qt5::Core LOCATION)
     get_filename_component(QT5_BIN_DIR "${QT5_CORE_LOCATION}" DIRECTORY)
@@ -90,6 +116,7 @@ if (WIN32)
 endif()
 
 install(TARGETS nxs EXPORT nxs DESTINATION lib)
+install(TARGETS ddb-nexus RUNTIME DESTINATION bin)
 install(FILES nxs.h DESTINATION include)
 install(FILES cmake/nxs-config.cmake DESTINATION share/cmake/nxs)
 

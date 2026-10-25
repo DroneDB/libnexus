@@ -52,6 +52,33 @@ cmake .. -A x64 -DCMAKE_TOOLCHAIN_FILE="C:\vcpkg\scripts\buildsystems\vcpkg.cmak
 cmake --build . --config Release --target ALL_BUILD -- /maxcpucount:14
 ```
 
+## ddb-nexus
+
+The build also produces `ddb-nexus`, a command line front end of the library. DroneDB runs it as a
+separate process (it does not load libnxs into its own), so the Nexus, VCGLib and Qt code stays on the
+other side of a process boundary.
+
+```
+ddb-nexus <input> <output>
+ddb-nexus --version
+```
+
+`<input>` is an OBJ or PLY model; `<output>` is the Nexus file (`.nxz` is compressed). The program
+calls `nexusBuild()` once, with the default options, and writes a progress line to stdout (flushed)
+every 15 seconds while it works, so a supervisor can tell a long build from a hang. `--version`
+prints `ddb-nexus <version>`; the version is `APP_VERSION` when libnexus is built as part of DroneDB,
+or whatever `-DDDB_NEXUS_VERSION=...` says (default `unknown`).
+
+| Exit code | Meaning |
+|-----------|---------|
+| 0  | success |
+| 1  | the build failed, the message is on stderr |
+| 2  | invalid input (for example the input file does not exist), the message is on stderr |
+| 64 | wrong command line, usage on stderr |
+
+On Linux `ddb-nexus` finds `libnxs.so` next to itself or in `../lib` (RUNPATH `$ORIGIN:$ORIGIN/../lib`).
+On Windows `nxs.dll` and the Qt `plugins` folder must sit next to `ddb-nexus.exe`, where the build puts them.
+
 ## Example
 
 ```
@@ -84,4 +111,7 @@ We welcome contributions! Feel free to open pull requests to add features you mi
 
 ## License
 
-AGPLv3
+GPL-3.0. The wrapper in this repository is licensed under the GNU General Public License, version 3
+(see `LICENSE`; it was AGPL-3.0 before). The vendored [Nexus](https://github.com/cnr-isti-vclab/nexus)
+is GPL-2.0-or-later and [VCGLib](https://github.com/cnr-isti-vclab/vcglib) is GPL-3.0; Qt is used
+under the LGPL-3.0.
