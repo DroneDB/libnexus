@@ -1,6 +1,6 @@
 // libnexus - C API and ddb-nexus command line tool to generate Nexus files.
 // Copyright (C) Digipa. Licensed under the GNU General Public License, version 3
-// (see LICENSE). It builds on Nexus (GPL-2.0-or-later), VCGLib (GPL-3.0) and Qt (LGPL-3.0).
+// (see LICENSE). It builds on Nexus (GPL-2.0-or-later) and VCGLib (GPL-3.0).
 
 #ifndef LIBNEXUS_H
 

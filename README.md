@@ -12,10 +12,7 @@ Requirements for Ubuntu:
 
 ```bash
 sudo apt-get install -y cmake zip ninja-build autoconf automake python3 \
-                                    libtool pkg-config curl build-essential bison \
-                                    python3-jinja2 libxi-dev libxtst-dev \
-                                    ^libxcb.*-dev libx11-xcb-dev libgl1-mesa-dev libxrender-dev libxi-dev \
-                                    libxkbcommon-dev libxkbcommon-x11-dev
+                                    libtool pkg-config curl build-essential bison
 ```
 
 The library uses vcpkg to manage dependencies. You can install it with:
@@ -55,7 +52,7 @@ cmake --build . --config Release --target ALL_BUILD -- /maxcpucount:14
 ## ddb-nexus
 
 The build also produces `ddb-nexus`, a command line front end of the library. DroneDB runs it as a
-separate process (it does not load libnxs into its own), so the Nexus, VCGLib and Qt code stays on the
+separate process (it does not load libnxs into its own), so the Nexus and VCGLib code stays on the
 other side of a process boundary.
 
 ```
@@ -81,7 +78,17 @@ side) is built once more without textures: the build succeeds, with the warning
 `textures could not be packed; built without textures` on stderr.
 
 On Linux `ddb-nexus` finds `libnxs.so` next to itself or in `../lib` (RUNPATH `$ORIGIN:$ORIGIN/../lib`).
-On Windows `nxs.dll` and the Qt `plugins` folder must sit next to `ddb-nexus.exe`, where the build puts them.
+On Windows `nxs.dll` must sit next to `ddb-nexus.exe`, where the build puts it.
+
+## Textures
+
+The textures of a model are read by libjpeg-turbo (JPEG), libpng (PNG), libtiff (TIFF) and libwebp
+(WebP), and by stb_image for BMP, GIF and TGA; the format is told from the file content, not from
+its extension. The alpha channel of a texture is ignored and its colors are used as stored. The
+textures of the Nexus file are JPEG images written by libjpeg-turbo. These libraries come from vcpkg
+(`vcpkg.json`); there is no GUI toolkit in the build.
+
+Not supported: animated WebP and 16 bit TIFF sample precision (read as 8 bit by libtiff).
 
 ## Example
 
@@ -117,5 +124,4 @@ We welcome contributions! Feel free to open pull requests to add features you mi
 
 GPL-3.0. The wrapper in this repository is licensed under the GNU General Public License, version 3
 (see `LICENSE`; it was AGPL-3.0 before). The vendored [Nexus](https://github.com/cnr-isti-vclab/nexus)
-is GPL-2.0-or-later and [VCGLib](https://github.com/cnr-isti-vclab/vcglib) is GPL-3.0; Qt is used
-under the LGPL-3.0.
+is GPL-2.0-or-later and [VCGLib](https://github.com/cnr-isti-vclab/vcglib) is GPL-3.0.

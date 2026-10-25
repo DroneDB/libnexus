@@ -4,7 +4,7 @@
 //   ddb-nexus --version
 //
 // DroneDB runs this program instead of loading libnxs into its own process, so the
-// Nexus, VCGLib and Qt code stays on the far side of a process boundary. The build
+// Nexus and VCGLib code stays on the far side of a process boundary. The build
 // itself is the single nexusBuild() call of the C API (nxs.h): the output is exactly
 // what an in-process call produces.
 //

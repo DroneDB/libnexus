@@ -8,8 +8,6 @@ else()
     message(FATAL_ERROR "Please set VCPKG_ROOT environment variable to use vcpkg")
 endif()
 
-find_package(Qt5 REQUIRED COMPONENTS Core Gui)
-
 set (CMAKE_CXX_STANDARD 14)
 
 option(BUILD_NXS_TEST "" OFF)
@@ -56,14 +54,6 @@ SET(SOURCES
 	nxs.cpp
 )
 
-get_property(initialize_static_libjpeg GLOBAL PROPERTY USE_NEXUS_STATIC_LIBJPEG)
-if (initialize_static_libjpeg STREQUAL "YES")
-    add_compile_definitions(INITIALIZE_STATIC_LIBJPEG)
-    message(STATUS "Libjpeg statically initialized")
-else()
-    message(STATUS "Libjpeg initialized as plugin")
-endif()
-
 include_directories("vendor/nexus/src/nxsbuild")
 
 add_library(nxs SHARED ${SOURCES} ${HEADERS})
@@ -72,12 +62,12 @@ set(ADDITIONAL_LIBS "")
 if (WIN32)
 	list(APPEND ADDITIONAL_LIBS netapi32 wsock32 ws2_32 userenv version winmm)
 endif()
-# Qt and nexus are PRIVATE: nxs is a shared library that carries them (Qt is static on Linux),
+# nexus is PRIVATE: nxs is a shared library that carries it (and the image libraries it uses),
 # and a program linking nxs must not pull a second copy of them into its own image.
-target_link_libraries(nxs PRIVATE Qt5::Core Qt5::Gui nexus ${ADDITIONAL_LIBS})
+target_link_libraries(nxs PRIVATE nexus ${ADDITIONAL_LIBS})
 
 # ddb-nexus: command line front end of nxs. DroneDB runs it as a separate process instead of
-# loading nxs into its own, so the Nexus / VCGLib / Qt code never shares an address space with
+# loading nxs into its own, so the Nexus / VCGLib code never shares an address space with
 # the host. The version it reports is set by the parent project (DroneDB's APP_VERSION).
 if (NOT DEFINED DDB_NEXUS_VERSION)
 	if (DEFINED APP_VERSION)
@@ -97,27 +87,6 @@ if (UNIX AND NOT APPLE)
 	set_target_properties(ddb-nexus PROPERTIES
 		BUILD_WITH_INSTALL_RPATH ON
 		INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib")
-endif()
-
-# Copy Qt plugins (imageformats, platforms, styles) to the output directory
-# This is required for WebP texture support on Windows. nxs.dll and ddb-nexus.exe share the
-# runtime output directory, and nxs looks for "plugins" next to the DLL.
-if (WIN32)
-    get_target_property(QT5_CORE_LOCATION Qt5::Core LOCATION)
-    get_filename_component(QT5_BIN_DIR "${QT5_CORE_LOCATION}" DIRECTORY)
-    # Qt plugins are typically in ../plugins relative to bin
-    get_filename_component(QT5_PLUGINS_DIR "${QT5_BIN_DIR}/../plugins" ABSOLUTE)
-
-    add_custom_command(TARGET nxs POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "Copying Qt plugins for libnexus..."
-        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:nxs>/plugins/imageformats"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:nxs>/plugins/platforms"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:nxs>/plugins/styles"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${QT5_PLUGINS_DIR}/imageformats" "$<TARGET_FILE_DIR:nxs>/plugins/imageformats"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${QT5_PLUGINS_DIR}/platforms" "$<TARGET_FILE_DIR:nxs>/plugins/platforms"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${QT5_PLUGINS_DIR}/styles" "$<TARGET_FILE_DIR:nxs>/plugins/styles"
-        COMMENT "Copying Qt plugins for WebP and other image format support"
-    )
 endif()
 
 install(TARGETS nxs EXPORT nxs DESTINATION lib)

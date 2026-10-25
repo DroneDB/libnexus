@@ -2,11 +2,11 @@
     "name": "libnexus",
     "version": "1.0.0",
     "dependencies": [
-        {
-            "name": "qt5",
-            "default-features": false,
-            "features": ["imageformats"]
-        }
+        "libjpeg-turbo",
+        "libpng",
+        "libwebp",
+        "stb",
+        "tiff"
     ],
     "builtin-baseline": "b1b19307e2d2ec1eefbdb7ea069de7d4bcd31f01"
 

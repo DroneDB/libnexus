@@ -1,15 +1,11 @@
 // libnexus - C API and ddb-nexus command line tool to generate Nexus files.
 // Copyright (C) Digipa. Licensed under the GNU General Public License, version 3
-// (see LICENSE). It builds on Nexus (GPL-2.0-or-later), VCGLib (GPL-3.0) and Qt (LGPL-3.0).
+// (see LICENSE). It builds on Nexus (GPL-2.0-or-later) and VCGLib (GPL-3.0).
 
 #include "nxs.h"
 
 #include <locale.h>
 
-#include <QCoreApplication>
-#include <QImageReader>
-#include <QLocale>
-#include <QtPlugin>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -17,16 +13,8 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
-
-#ifdef WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#endif
 
 #include "../common/error.h"
 #include "../common/pathutil.h"
@@ -42,12 +30,8 @@
 using namespace std;
 using namespace nx;
 
-#ifdef INITIALIZE_STATIC_LIBJPEG
-Q_IMPORT_PLUGIN(QJpegPlugin);
-#endif
-
 // =====================================================================
-// Internal helpers (RAII, Qt init, locale management)
+// Internal helpers (RAII, locale management)
 // =====================================================================
 
 namespace {
@@ -81,17 +65,6 @@ private:
     std::string oldLocale_;
 };
 
-// RAII: set QLocale::default to C for this scope and restore previous.
-class QLocaleGuard {
-public:
-    QLocaleGuard() : oldLocale_(QLocale()) { QLocale::setDefault(QLocale::c()); }
-
-    ~QLocaleGuard() { QLocale::setDefault(oldLocale_); }
-
-private:
-    QLocale oldLocale_;
-};
-
 // RAII: remove a file on destruction if path is not empty.
 class TempFileGuard {
 public:
@@ -111,48 +84,6 @@ public:
 private:
     std::string path_;
 };
-
-// Initialize Qt core application and plugin paths once, in a thread-safe way.
-void initializeQtEnvironment() {
-    static std::once_flag qtInitFlag;
-
-    std::call_once(qtInitFlag, []() {
-        // If the host process is already a Qt application, do not create another instance.
-        if (!QCoreApplication::instance()) {
-            static int argc = 1;
-            static char appName[] = "nexusBuild";
-            static char* argv[] = {appName, nullptr};
-
-            // Never deleted, on purpose. A static QCoreApplication would be destroyed by exit()
-            // on the thread that ends the process, but it is created by the first build, which
-            // a host (a service running its jobs on worker threads) runs on a thread that is
-            // long gone by then: its destructor reads the dead thread's data and the process
-            // crashes (SIGSEGV) after the work was done. The operating system reclaims the
-            // instance when the process ends.
-            new QCoreApplication(argc, argv);
-        }
-
-        // Plugins (image formats) are looked for in a "plugins" folder next to the library.
-        std::string pluginPath;
-#ifdef WIN32
-        // On Windows, derive plugin path from this DLL location.
-        HMODULE hModule = nullptr;
-        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                               reinterpret_cast<LPCSTR>(&initializeQtEnvironment),
-                               &hModule)) {
-            wchar_t dllPath[MAX_PATH] = {};
-            if (GetModuleFileNameW(hModule, dllPath, MAX_PATH) > 0)
-                pluginPath = pathToUtf8(std::filesystem::path(dllPath).parent_path() / "plugins");
-        }
-#else
-        // On Unix-like systems, fall back to the application directory.
-        pluginPath = QCoreApplication::applicationDirPath().toStdString() + "/plugins";
-#endif
-        if (!pluginPath.empty() && pathExists(pluginPath))
-            QCoreApplication::addLibraryPath(QString::fromUtf8(pluginPath.c_str()));
-    });
-}
 
 // Builds the Nexus file; throws on failure.
 void buildNexusFile(const std::string& input,
@@ -355,19 +286,8 @@ NXSErr doNexusBuild(const char* input,
     }
 
     try {
-        // Initialize Qt (thread-safe, once per process)
-        initializeQtEnvironment();
-
         // Use "C" numeric locale for this operation only.
         NumericLocaleGuard numericLocaleGuard;
-        QLocaleGuard qtLocaleGuard;
-
-#if defined(DEBUG)
-        std::cerr << "Supported image formats:";
-        for (const auto& format : QImageReader::supportedImageFormats())
-            std::cerr << " " << format.constData();
-        std::cerr << std::endl;
-#endif
 
         try {
             buildNexusFile(input, output, opts);
