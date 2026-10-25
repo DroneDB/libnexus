@@ -82,7 +82,7 @@ public:
         // A destructor must not throw, and the path conversion can (see doNexusBuild). A folder
         // is never what the guard is for: it is the path of an output that could not be opened.
         try {
-            const auto path = pathFromUtf8(path_);
+            const auto path = nativePath(path_);
             std::error_code ec;
             if (!std::filesystem::is_directory(path, ec))
                 std::filesystem::remove(path, ec);
@@ -286,11 +286,56 @@ void buildNexusFile(const std::string& input,
 
     if (writtenOutput != finalOutput) {
         std::error_code ec;
-        std::filesystem::rename(pathFromUtf8(writtenOutput), pathFromUtf8(finalOutput), ec);
+        std::filesystem::rename(nativePath(writtenOutput), nativePath(finalOutput), ec);
         if (ec)
             throw Error("could not rename " + writtenOutput + " to " + finalOutput + ": " + ec.message());
     }
     writtenOutputGuard.keep();
+}
+
+// How many times a build whose nodes turn out to have too many vertices is tried again, each
+// time with half as many triangles per node as the time before
+constexpr int kSmallerNodeAttempts = 3;
+
+// Builds the Nexus file, falling back to what the input allows; throws on failure. Each attempt
+// that fails leaves nothing behind: it fails while building the hierarchy, and its scratch files
+// and partial outputs go with it (see buildNexusFile), so the next one starts from scratch.
+//  - A node needs a texture too large to pack: the model is built without textures. Models of
+//    this kind always built that way.
+//  - A node has more vertices than a node holds (a fragmented texture parametrization): the
+//    model is built with smaller nodes. Leaving the node out, which Nexus did, leaves a hole in
+//    the model.
+void buildNexusFileWithFallbacks(const std::string& input,
+                                 const std::string& output,
+                                 const NexusBuildOptions& opts) {
+    NexusBuildOptions attempt = opts;
+    int smallerNodeAttempts = 0;
+    for (;;) {
+        try {
+            buildNexusFile(input, output, attempt);
+            break;
+        } catch (const TexturePackingError& error) {
+            if (attempt.disable_texcoords)
+                throw;
+            std::cerr << "Warning: " << error.what() << std::endl;
+            attempt.disable_texcoords = true;
+        } catch (const NodeTooLargeError& error) {
+            if (smallerNodeAttempts == kSmallerNodeAttempts)
+                throw Error(std::string(error.what()) + "; nodes of at most " + std::to_string(attempt.node_faces) +
+                            " triangles, the smallest tried (the build started with " +
+                            std::to_string(opts.node_faces) + "), are still too large for this model");
+            std::cerr << "Warning: " << error.what() << std::endl;
+            attempt.node_faces /= 2;
+            ++smallerNodeAttempts;
+        }
+    }
+
+    if (attempt.node_faces != opts.node_faces)
+        std::cerr << "Warning: built with nodes of " << attempt.node_faces << " triangles instead of "
+                  << opts.node_faces << ": the texture parametrization is too fragmented for larger nodes"
+                  << std::endl;
+    if (attempt.disable_texcoords && !opts.disable_texcoords)
+        std::cerr << "Warning: textures could not be packed; built without textures" << std::endl;
 }
 
 // Internal implementation used by both nexusBuild and nexusBuildEx.
@@ -326,20 +371,7 @@ NXSErr doNexusBuild(const char* input,
         // Use "C" numeric locale for this operation only.
         NumericLocaleGuard numericLocaleGuard;
 
-        try {
-            buildNexusFile(input, output, opts);
-        } catch (const TexturePackingError& error) {
-            // A node needs a texture too large to pack. Models of this kind used to build
-            // without textures, so they still do: the first attempt left nothing behind (it
-            // failed while building the hierarchy, and its scratch files went with it).
-            if (opts.disable_texcoords)
-                throw;
-            std::cerr << "Warning: " << error.what() << std::endl;
-            NexusBuildOptions withoutTextures = opts;
-            withoutTextures.disable_texcoords = true;
-            buildNexusFile(input, output, withoutTextures);
-            std::cerr << "Warning: textures could not be packed; built without textures" << std::endl;
-        }
+        buildNexusFileWithFallbacks(input, output, opts);
 
         return NXSERR_NONE;
     } catch (const nx::Error& e) {
