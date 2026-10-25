@@ -60,7 +60,9 @@ void setErrorMessage(char* buffer, int bufferSize, const std::string& message) {
 void setErrorMessage(char* buffer, int bufferSize, const QString& message) {
     if (!buffer || bufferSize <= 0)
         return;
-    QByteArray ba = message.toLatin1();
+    // UTF-8 like every other message and path of this API: Latin-1 turns a path in any other
+    // script into question marks
+    QByteArray ba = message.toUtf8();
     std::strncpy(buffer, ba.constData(), bufferSize - 1);
     buffer[bufferSize - 1] = '\0';
 }
@@ -335,7 +337,9 @@ NXSErr doNexusBuild(const char* input,
 
             NexusData nexus;  // its constructor creates and owns the QTNexusFile
 
-            if (!nexus.open(nexusInputs[0].toLatin1())) {
+            // UTF-8: NexusData hands the name to a QFile, and Qt 5 reads a const char* file
+            // name as UTF-8. Latin-1 could not name a file under a non-Latin-1 folder.
+            if (!nexus.open(nexusInputs[0].toUtf8())) {
                 setErrorMessage(
                     errorMessage,
                     errorMessageSize,
