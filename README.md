@@ -76,6 +76,10 @@ or whatever `-DDDB_NEXUS_VERSION=...` says (default `unknown`).
 | 2  | invalid input (for example the input file does not exist), the message is on stderr |
 | 64 | wrong command line, usage on stderr |
 
+A model whose textures cannot be packed (a single Nexus node would need a texture over 16K on a
+side) is built once more without textures: the build succeeds, with the warning
+`textures could not be packed; built without textures` on stderr.
+
 On Linux `ddb-nexus` finds `libnxs.so` next to itself or in `../lib` (RUNPATH `$ORIGIN:$ORIGIN/../lib`).
 On Windows `nxs.dll` and the Qt `plugins` folder must sit next to `ddb-nexus.exe`, where the build puts them.
 

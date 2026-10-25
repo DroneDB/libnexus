@@ -43,9 +43,6 @@ if(NOT VCGDIR)
 endif()
 
 add_subdirectory("vendor/nexus")
-# VCGLib's headers need C++17 (if constexpr); Nexus itself asks only for C++11. PUBLIC, so nxs,
-# which includes the same headers, is built as C++17 too.
-target_compile_features(nexus PUBLIC cxx_std_17)
 
 #add_subdirectory(vendor/nexus/corto EXCLUDE_FROM_ALL)
 
