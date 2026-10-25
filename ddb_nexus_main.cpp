@@ -11,6 +11,10 @@
 // While the build runs, one line per kHeartbeatInterval is written to stdout, so a
 // supervisor that watches the program's output can tell a long build from a hang.
 //
+// Paths are UTF-8 on every platform, which is what nexusBuild() expects. On Windows the
+// program reads its UTF-16 command line and converts it, since the narrow argv of main is
+// in the ANSI code page and cannot hold a model under, say, a Cyrillic or CJK folder name.
+//
 // Exit codes:
 //   0   success (or --version / --help)
 //   1   the build failed (NXSERR_EXCEPTION): the message is on stderr
@@ -21,12 +25,23 @@
 
 #include <chrono>
 #include <condition_variable>
-#include <cstring>
+#include <cwchar>
 #include <iostream>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 #include "nxs.h"
 
@@ -89,26 +104,25 @@ private:
     std::thread thread_;  // last: starts running when the members above are ready
 };
 
-}  // namespace
-
-int main(int argc, char* argv[]) {
-    if (argc == 2 && std::strcmp(argv[1], "--version") == 0) {
+// args are the command line arguments without the program name, as UTF-8
+int run(const std::vector<std::string>& args) {
+    if (args.size() == 1 && args[0] == "--version") {
         std::cout << kProgram << " " << DDB_NEXUS_VERSION << std::endl;
         return kExitOk;
     }
 
-    if (argc == 2 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) {
+    if (args.size() == 1 && (args[0] == "--help" || args[0] == "-h")) {
         printUsage(std::cout);
         return kExitOk;
     }
 
-    if (argc != 3) {
+    if (args.size() != 2) {
         printUsage(std::cerr);
         return kExitUsage;
     }
 
-    const char* input = argv[1];
-    const char* output = argv[2];
+    const char* input = args[0].c_str();
+    const char* output = args[1].c_str();
 
     char errorMessage[kErrorMessageSize] = {0};
     NXSErr result;
@@ -129,3 +143,36 @@ int main(int argc, char* argv[]) {
     std::cerr << kProgram << ": could not build " << output << " from " << input << ": " << message << std::endl;
     return kExitBuildFailed;
 }
+
+#ifdef _WIN32
+// A UTF-16 command line argument as UTF-8
+std::string toUtf8(const wchar_t* wide) {
+    const int length = static_cast<int>(std::wcslen(wide));
+    if (length == 0)
+        return {};
+    const int size = WideCharToMultiByte(CP_UTF8, 0, wide, length, nullptr, 0, nullptr, nullptr);
+    std::string out(static_cast<size_t>(size), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, wide, length, &out[0], size, nullptr, nullptr);
+    return out;
+}
+#endif
+
+}  // namespace
+
+#ifdef _WIN32
+
+// The arguments arrive as UTF-16 so that a path in any script survives
+int wmain(int argc, wchar_t* argv[]) {
+    std::vector<std::string> args;
+    for (int i = 1; i < argc; ++i)
+        args.push_back(toUtf8(argv[i]));
+    return run(args);
+}
+
+#else
+
+int main(int argc, char* argv[]) {
+    return run(std::vector<std::string>(argv + 1, argv + argc));
+}
+
+#endif
