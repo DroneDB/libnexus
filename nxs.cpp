@@ -73,11 +73,20 @@ public:
 
     void setPath(const std::string& path) { path_ = path; }
     const std::string& path() const { return path_; }
+    // The file is complete: leave it in place
+    void keep() { path_.clear(); }
 
     ~TempFileGuard() {
-        if (!path_.empty()) {
+        if (path_.empty())
+            return;
+        // A destructor must not throw, and the path conversion can (see doNexusBuild). A folder
+        // is never what the guard is for: it is the path of an output that could not be opened.
+        try {
+            const auto path = pathFromUtf8(path_);
             std::error_code ec;
-            std::filesystem::remove(pathFromUtf8(path_), ec);
+            if (!std::filesystem::is_directory(path, ec))
+                std::filesystem::remove(path, ec);
+        } catch (...) {
         }
     }
 
@@ -149,6 +158,12 @@ void buildNexusFile(const std::string& input,
         stream->textures.clear();
     }
 
+    // Remove the temporary files the saves below write, whatever happens. They are declared
+    // before the builder, which keeps its file open until it is destroyed when its save throws:
+    // on Windows an open file cannot be removed.
+    TempFileGuard writtenOutputGuard;
+    TempFileGuard temporaryNxsGuard;
+
     // Place the builder's out-of-core caches (chunks + per-node texture file)
     // in the same directory as the output (the per-build temp folder), so they
     // do not leak into the process working directory and are reclaimed with it.
@@ -190,18 +205,22 @@ void buildNexusFile(const std::string& input,
     bool hasNxzExtension = endsWithNoCase(finalOutput, ".nxz");
     bool doCompression = hasNxzExtension && opts.enable_compression;
 
-    std::string builderOutput = finalOutput;
-    if (doCompression) {
-        // If compression is enabled, write a temporary .nxs file first
-        builderOutput += ".tmp.nxs";
-    }
+    // The output is written under another name in its folder and given its name only once it
+    // is complete: a save that fails (or a process killed while saving) leaves no half file
+    // under the output name, and does not remove one an earlier build left there. A deepzoom
+    // output is a file and a folder named after it, so it is written in place.
+    const std::string writtenOutput = opts.deepzoom ? finalOutput : finalOutput + ".part";
+
+    // If compression is enabled, write a temporary .nxs file first
+    const std::string builderOutput = doCompression ? finalOutput + ".tmp.nxs" : writtenOutput;
+
+    writtenOutputGuard.setPath(writtenOutput);
+    if (doCompression)
+        temporaryNxsGuard.setPath(builderOutput);
 
     builder.save(builderOutput);
 
     if (doCompression) {
-        // Ensure temporary .nxs is always removed
-        TempFileGuard tempNxsGuard(builderOutput);
-
         NexusData nexus;  // its constructor creates and owns the file reader
 
         if (!nexus.open(builderOutput.c_str())) {
@@ -262,8 +281,16 @@ void buildNexusFile(const std::string& input,
         extractor.tex_step = opts.tex_step;
 
         // Save final compressed file (.nxz)
-        extractor.save(finalOutput, signature);
+        extractor.save(writtenOutput, signature);
     }
+
+    if (writtenOutput != finalOutput) {
+        std::error_code ec;
+        std::filesystem::rename(pathFromUtf8(writtenOutput), pathFromUtf8(finalOutput), ec);
+        if (ec)
+            throw Error("could not rename " + writtenOutput + " to " + finalOutput + ": " + ec.message());
+    }
+    writtenOutputGuard.keep();
 }
 
 // Internal implementation used by both nexusBuild and nexusBuildEx.
@@ -278,10 +305,20 @@ NXSErr doNexusBuild(const char* input,
         return NXSERR_INVALID_INPUT;
     }
 
-    if (!pathExists(input)) {
-        setErrorMessage(errorMessage,
-                        errorMessageSize,
-                        std::string("Input file does not exist: ") + input);
+    // Inside a try like everything else that can throw: turning a path that is not valid
+    // UTF-8 into a file system path throws on Windows, and no exception may leave this C API.
+    try {
+        if (!pathExists(input)) {
+            setErrorMessage(errorMessage,
+                            errorMessageSize,
+                            std::string("Input file does not exist: ") + input);
+            return NXSERR_INVALID_INPUT;
+        }
+    } catch (const std::exception& e) {
+        setErrorMessage(errorMessage, errorMessageSize, std::string("Input path is not valid: ") + e.what());
+        return NXSERR_INVALID_INPUT;
+    } catch (...) {
+        setErrorMessage(errorMessage, errorMessageSize, "Input path is not valid");
         return NXSERR_INVALID_INPUT;
     }
 
