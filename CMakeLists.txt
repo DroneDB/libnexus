@@ -14,10 +14,15 @@ set (CMAKE_CXX_STANDARD 14)
 
 option(BUILD_NXS_TEST "" OFF)
 
-# VCGLib -- required
+# VCGLib -- required. It is header only and only compiled into nxs, so it is added without its
+# install rules (EXCLUDE_FROM_ALL) and without OpenMP: Nexus builds its nodes on one thread, and
+# with OpenMP VCGLib would hand Eigen's matrix products to a thread team and nxs would need the
+# OpenMP runtime next to it.
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+set(VCG_USE_OPENMP OFF)
 if (VCGDIR) # VCGDIR exists - using custom user vcglib path
 	if(EXISTS ${VCGDIR})
-		add_subdirectory(${VCGDIR} ${CMAKE_CURRENT_BINARY_DIR}/vcglib)
+		add_subdirectory(${VCGDIR} ${CMAKE_CURRENT_BINARY_DIR}/vcglib EXCLUDE_FROM_ALL)
 		message(STATUS "nexus - VCGLib - using custom VCGDIR path library")
 	else()
 		set(VCGDIR NOTFOUND)
@@ -25,7 +30,7 @@ if (VCGDIR) # VCGDIR exists - using custom user vcglib path
 else()
 	get_filename_component(VCGDIR "${CMAKE_CURRENT_LIST_DIR}/vendor/vcglib" ABSOLUTE)
 	if(EXISTS ${VCGDIR})
-		add_subdirectory(${VCGDIR} ${CMAKE_CURRENT_BINARY_DIR}/vcglib)
+		add_subdirectory(${VCGDIR} ${CMAKE_CURRENT_BINARY_DIR}/vcglib EXCLUDE_FROM_ALL)
 		message(STATUS "nexus - VCGLib - using bundled source")
 	else()
 		set(VCGDIR NOTFOUND)
@@ -38,6 +43,9 @@ if(NOT VCGDIR)
 endif()
 
 add_subdirectory("vendor/nexus")
+# VCGLib's headers need C++17 (if constexpr); Nexus itself asks only for C++11. PUBLIC, so nxs,
+# which includes the same headers, is built as C++17 too.
+target_compile_features(nexus PUBLIC cxx_std_17)
 
 #add_subdirectory(vendor/nexus/corto EXCLUDE_FROM_ALL)
 
