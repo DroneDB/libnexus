@@ -1,12 +1,18 @@
 cmake_minimum_required(VERSION 3.10)
-project(libnexus)
 
-# Use vcpkg manifest mode
-if(DEFINED ENV{VCPKG_ROOT})
-    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
-else()
-    message(FATAL_ERROR "Please set VCPKG_ROOT environment variable to use vcpkg")
+# The dependencies come from vcpkg (manifest mode, vcpkg.json). A parent project that adds this
+# one has chosen its toolchain already, and so has a standalone build given CMAKE_TOOLCHAIN_FILE;
+# otherwise a standalone build takes vcpkg's from VCPKG_ROOT. CMake reads the toolchain in
+# project(), so it is set before.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    if(DEFINED ENV{VCPKG_ROOT})
+        set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+    else()
+        message(FATAL_ERROR "Set CMAKE_TOOLCHAIN_FILE to vcpkg's scripts/buildsystems/vcpkg.cmake, or the VCPKG_ROOT environment variable")
+    endif()
 endif()
+
+project(libnexus)
 
 set (CMAKE_CXX_STANDARD 14)
 
