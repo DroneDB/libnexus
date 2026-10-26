@@ -84,9 +84,19 @@ On Windows `nxs.dll` must sit next to `ddb-nexus.exe`, where the build puts it.
 
 The textures of a model are read by libjpeg-turbo (JPEG), libpng (PNG), libtiff (TIFF) and libwebp
 (WebP), and by stb_image for BMP, GIF and TGA; the format is told from the file content, not from
-its extension. The alpha channel of a texture is ignored and its colors are used as stored. The
-textures of the Nexus file are JPEG images written by libjpeg-turbo. These libraries come from vcpkg
-(`vcpkg.json`); there is no GUI toolkit in the build.
+its extension. The alpha channel of a texture is ignored and its colors are used as stored. These
+libraries come from vcpkg (`vcpkg.json`); there is no GUI toolkit in the build.
+
+The textures of the Nexus file are WebP images (quality `texture_quality`, 96) written by libwebp,
+at the resolution of the model's textures:
+
+- A node texture is at most `max_node_texture_side` pixels (1024) on a side. The nodes are cut by
+  the texels they cover as well as by their triangles, so that their textures fit that size.
+- A model whose texture is much finer than its triangles (photogrammetry) first gets levels that
+  keep the triangles and only halve the texture, as many as the texture needs to come down to a
+  few texels per triangle edge (`skip_levels`, -1). Their node error is the size of a texel, so
+  a viewer loads the finest textures only where a texel is large enough on the screen. The
+  levels after them are simplified as usual.
 
 Not supported: animated WebP and 16 bit TIFF sample precision (read as 8 bit by libtiff).
 

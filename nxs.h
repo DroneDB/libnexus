@@ -27,13 +27,13 @@ enum NXSErr {
 struct NexusBuildOptions {
     // --- Geometry build options ---
     int   node_faces            = 1 << 14;  // triangles per node = 16384
-    float texel_weight          = 0.1f;     // relative weight of texels
     int   top_node_faces        = 4096;
     float vertex_quantization   = 0.0f;     // 0.0 = disabled
-    int   texture_quality       = 95;       // JPEG texture quality
+    int   texture_quality       = 96;       // WebP quality of the node textures
+    int   max_node_texture_side = 1024;     // longest side of a node texture (0 = no limit)
     int   ram_buffer_mb         = 16000;    // approximate RAM budget (MB)
     float scaling               = 0.5f;     // simplification ratio
-    int   skip_levels           = 0;        // skip simplify levels
+    int   skip_levels           = -1;       // levels that keep the geometry and halve the texture (-1 = as the texture needs)
     float adaptive              = 0.333f;   // KDTree adaptive factor
 
     bool  point_cloud           = false;

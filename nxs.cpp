@@ -94,6 +94,21 @@ private:
     std::string path_;
 };
 
+// The share of a node texture that the texture charts of the node's triangles fill once packed.
+// On a photogrammetry model (224k triangles, 1.6 gigapixels of texture) nodes cut at this share
+// of the largest node texture left 4% of the texels to the downscaling that makes them fit.
+constexpr double NODE_TEXTURE_FILL = 0.35;
+
+// The weight of a texel in the kd-tree, which splits a node when the weight of its texels passes
+// node_faces: a node holds the texels that fill its texture without downscaling, at most
+// max_node_texture_side on a side. 0 (no texel limit) when there is no such side.
+float texelWeight(const NexusBuildOptions& opts) {
+    const double side = double(opts.max_node_texture_side);
+    if (side <= 0)
+        return 0.0f;
+    return float(double(opts.node_faces) / (side * side * NODE_TEXTURE_FILL));
+}
+
 // Builds the Nexus file; throws on failure.
 void buildNexusFile(const std::string& input,
                     const std::string& output,
@@ -179,7 +194,9 @@ void buildNexusFile(const std::string& input,
         builder.header.signature.flags |= nx::Signature::Flags::DEEPZOOM;
     }
 
+    builder.texFormat = NexusBuilder::TextureFormat::Webp;
     builder.tex_quality = opts.texture_quality;
+    builder.maxNodeTexSide = opts.max_node_texture_side;
 
     if (!builder.initAtlas(stream->textures)) {
         throw Error("Failed to initialize texture atlas");
@@ -191,7 +208,7 @@ void buildNexusFile(const std::string& input,
         treeImpl->setMaxMemory((uint64_t(1) << 20) * static_cast<uint64_t>(opts.ram_buffer_mb) / 2);
 
         treeImpl->setMaxWeight(opts.node_faces);
-        treeImpl->texelWeight = opts.texel_weight;
+        treeImpl->texelWeight = texelWeight(opts);
         treeImpl->setTrianglesPerBlock(opts.node_faces);
 
         tree = std::move(treeImpl);
