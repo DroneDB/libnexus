@@ -1,12 +1,13 @@
 // ddb-nexus: builds a Nexus (.nxs / .nxz) file from a 3D model, in its own process.
 //
-//   ddb-nexus <input> <output>
+//   ddb-nexus [--threads N] <input> <output>
 //   ddb-nexus --version
 //
 // DroneDB runs this program instead of loading libnxs into its own process, so the
 // Nexus and VCGLib code stays on the far side of a process boundary. The build
-// itself is the single nexusBuild() call of the C API (nxs.h): the output is exactly
-// what an in-process call produces.
+// itself is the single nexusBuildEx() call of the C API (nxs.h), with the default
+// options and at most N threads busy (one per core without --threads): the output is
+// exactly what an in-process call produces.
 //
 // While the build runs, one line per kHeartbeatInterval is written to stdout, so a
 // supervisor that watches the program's output can tell a long build from a hang.
@@ -62,10 +63,27 @@ constexpr const char* kProgram = "ddb-nexus";
 // Well below any idle timeout a supervisor is likely to apply to a silent child.
 constexpr std::chrono::seconds kHeartbeatInterval{15};
 
+// More than any machine has cores; a larger value is a mistake, not a request
+constexpr int kMaxThreads = 4096;
+
+// A thread count: decimal digits only, from 1 to kMaxThreads; anything else is 0
+int parseThreads(const std::string& value) {
+    if (value.empty() || value.size() > 4)
+        return 0;
+    int n = 0;
+    for (const char c : value) {
+        if (c < '0' || c > '9')
+            return 0;
+        n = n * 10 + (c - '0');
+    }
+    return n <= kMaxThreads ? n : 0;
+}
+
 void printUsage(std::ostream& out) {
-    out << "Usage: " << kProgram << " <input> <output>\n"
+    out << "Usage: " << kProgram << " [--threads N] <input> <output>\n"
         << "       " << kProgram << " --version\n"
-        << "Builds a Nexus file (.nxs, or .nxz when <output> ends in .nxz) from an OBJ or PLY model.\n";
+        << "Builds a Nexus file (.nxs, or .nxz when <output> ends in .nxz) from an OBJ or PLY model,\n"
+        << "keeping at most N threads busy (default: one per core).\n";
 }
 
 // Prints "ddb-nexus: building <input> (<n> s)" at once and then every kHeartbeatInterval
@@ -116,19 +134,33 @@ int run(const std::vector<std::string>& args) {
         return kExitOk;
     }
 
-    if (args.size() != 2) {
+    NexusBuildOptions options;
+    std::vector<std::string> paths(args);
+    if (paths.size() == 4 && paths[0] == "--threads") {
+        const int threads = parseThreads(paths[1]);
+        if (threads == 0) {
+            std::cerr << kProgram << ": --threads takes a whole number from 1 to " << kMaxThreads << ", not '"
+                      << paths[1] << "'" << std::endl;
+            printUsage(std::cerr);
+            return kExitUsage;
+        }
+        options.threads = threads;
+        paths.erase(paths.begin(), paths.begin() + 2);
+    }
+
+    if (paths.size() != 2) {
         printUsage(std::cerr);
         return kExitUsage;
     }
 
-    const char* input = args[0].c_str();
-    const char* output = args[1].c_str();
+    const char* input = paths[0].c_str();
+    const char* output = paths[1].c_str();
 
     char errorMessage[kErrorMessageSize] = {0};
     NXSErr result;
     {
         Heartbeat heartbeat(input);
-        result = nexusBuild(input, output, errorMessage, kErrorMessageSize);
+        result = nexusBuildEx(input, output, options, errorMessage, kErrorMessageSize);
     }
 
     if (result == NXSERR_NONE)

@@ -56,12 +56,13 @@ separate process (it does not load libnxs into its own), so the Nexus and VCGLib
 other side of a process boundary.
 
 ```
-ddb-nexus <input> <output>
+ddb-nexus [--threads N] <input> <output>
 ddb-nexus --version
 ```
 
 `<input>` is an OBJ or PLY model; `<output>` is the Nexus file (`.nxz` is compressed). The program
-calls `nexusBuild()` once, with the default options, and writes a progress line to stdout (flushed)
+calls `nexusBuildEx()` once, with the default options and `threads` set to N (1 or more; without
+`--threads`, one per core), and writes a progress line to stdout (flushed)
 every 15 seconds while it works, so a supervisor can tell a long build from a hang. `--version`
 prints `ddb-nexus <version>`; the version is `APP_VERSION` when libnexus is built as part of DroneDB,
 or whatever `-DDDB_NEXUS_VERSION=...` says (default `unknown`).
@@ -88,8 +89,9 @@ its extension. The alpha channel of a texture is ignored and its colors are used
 libraries come from vcpkg (`vcpkg.json`); there is no GUI toolkit in the build.
 
 The textures of the Nexus file are WebP images (quality `texture_quality`, 90, encoder effort 2)
-written by libwebp on `texture_threads` threads (0: one per core), in the order of the nodes, at
-the resolution of the model's textures:
+written by libwebp, in the order of the nodes, at the resolution of the model's textures. The
+build keeps at most `threads` threads busy (0: one per core; `ddb-nexus --threads N`): the one
+that builds the nodes and the ones that encode their textures meanwhile.
 
 - A node texture is at most `max_node_texture_side` pixels (1024) on a side. The nodes are cut by
   the texels they cover as well as by their triangles, so that their textures fit that size.
