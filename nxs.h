@@ -29,7 +29,8 @@ struct NexusBuildOptions {
     int   node_faces            = 1 << 14;  // triangles per node = 16384
     int   top_node_faces        = 4096;
     float vertex_quantization   = 0.0f;     // 0.0 = disabled
-    int   texture_quality       = 96;       // WebP quality of the node textures
+    int   texture_quality       = 90;       // WebP quality of the node textures
+    int   texture_threads       = 0;        // threads encoding node textures (0 = one per core)
     int   max_node_texture_side = 1024;     // longest side of a node texture (0 = no limit)
     int   ram_buffer_mb         = 16000;    // approximate RAM budget (MB)
     float scaling               = 0.5f;     // simplification ratio

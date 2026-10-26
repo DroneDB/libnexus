@@ -87,16 +87,20 @@ The textures of a model are read by libjpeg-turbo (JPEG), libpng (PNG), libtiff 
 its extension. The alpha channel of a texture is ignored and its colors are used as stored. These
 libraries come from vcpkg (`vcpkg.json`); there is no GUI toolkit in the build.
 
-The textures of the Nexus file are WebP images (quality `texture_quality`, 96) written by libwebp,
-at the resolution of the model's textures:
+The textures of the Nexus file are WebP images (quality `texture_quality`, 90, encoder effort 2)
+written by libwebp on `texture_threads` threads (0: one per core), in the order of the nodes, at
+the resolution of the model's textures:
 
 - A node texture is at most `max_node_texture_side` pixels (1024) on a side. The nodes are cut by
   the texels they cover as well as by their triangles, so that their textures fit that size.
+- The texels of a node texture that no triangle draws, past a margin of 4 texels, are one flat
+  color: about 60% of a node texture lies outside its triangles, and they would cost as many
+  bytes as the rest.
 - A model whose texture is much finer than its triangles (photogrammetry) first gets levels that
-  keep the triangles and only halve the texture, as many as the texture needs to come down to a
-  few texels per triangle edge (`skip_levels`, -1). Their node error is the size of a texel, so
-  a viewer loads the finest textures only where a texel is large enough on the screen. The
-  levels after them are simplified as usual.
+  keep the triangles and halve the side of the texture, as mipmaps do, as many as the texture
+  needs to come down to a few texels per triangle edge (`skip_levels`, -1). Their node error is
+  the size of a texel, so a viewer loads the finest textures only where a texel is large enough
+  on the screen. The levels after them are simplified as usual.
 
 Not supported: animated WebP and 16 bit TIFF sample precision (read as 8 bit by libtiff).
 

@@ -14,6 +14,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "../common/error.h"
@@ -196,6 +197,8 @@ void buildNexusFile(const std::string& input,
 
     builder.texFormat = NexusBuilder::TextureFormat::Webp;
     builder.tex_quality = opts.texture_quality;
+    builder.textureThreads = opts.texture_threads > 0 ? opts.texture_threads
+                                                      : int(std::max(1u, std::thread::hardware_concurrency()));
     builder.maxNodeTexSide = opts.max_node_texture_side;
 
     if (!builder.initAtlas(stream->textures)) {
